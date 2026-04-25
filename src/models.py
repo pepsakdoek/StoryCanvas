@@ -3,7 +3,6 @@ from pydantic import BaseModel, Field
 from enum import Enum
 import uuid
 
-# We'll keep the Enum as a default/fallback, but allow dynamic strings
 class DefaultImportance(str, Enum):
     MAIN = "main"
     SECONDARY = "secondary"
@@ -17,15 +16,12 @@ class AttributeTemplate(BaseModel):
     enabled: bool = True
 
 class CanvasSettings(BaseModel):
-    # Dynamic importance levels
     importance_levels: List[str] = [
         DefaultImportance.MAIN.value,
         DefaultImportance.SECONDARY.value,
         DefaultImportance.TERTIARY.value,
         DefaultImportance.EXTRA.value
     ]
-    
-    # Recommended attributes for entities in this canvas
     actor_attributes: List[AttributeTemplate] = [
         AttributeTemplate(name="Personality"),
         AttributeTemplate(name="Likes"),
@@ -33,37 +29,36 @@ class CanvasSettings(BaseModel):
         AttributeTemplate(name="Secret"),
         AttributeTemplate(name="Weakness"),
     ]
-    place_attributes: List[AttributeTemplate] = [
-        AttributeTemplate(name="Atmosphere"),
-        AttributeTemplate(name="History"),
-    ]
-    item_attributes: List[AttributeTemplate] = [
-        AttributeTemplate(name="Condition"),
-        AttributeTemplate(name="Value"),
-    ]
-    knowledge_attributes: List[AttributeTemplate] = [
-        AttributeTemplate(name="Source"),
-        AttributeTemplate(name="Certainty"),
-    ]
+    place_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Atmosphere")]
+    item_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Condition")]
+    knowledge_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Source")]
 
-class Entity(BaseModel):
-    uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
+# --- Global Identity ---
+class EntityIdentity(BaseModel):
+    uid: str
     name: str
-    attributes: Dict[str, str] = Field(default_factory=dict)
-    x: float = 100.0
-    y: float = 100.0
-
-class Actor(Entity):
+    entity_type: str # "Actor", "Place", etc.
     importance: str = DefaultImportance.EXTRA.value
 
-class Place(Entity):
-    pass
+class GlobalRegistry(BaseModel):
+    entities: Dict[str, EntityIdentity] = Field(default_factory=dict)
 
-class Item(Entity):
-    pass
+# --- Temporal State ---
+class EntityState(BaseModel):
+    uid: str
+    x: float = 100.0
+    y: float = 100.0
+    attributes: Dict[str, str] = Field(default_factory=dict)
 
-class Knowledge(Entity):
-    pass
+# --- Events ---
+class Event(BaseModel):
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: str = ""
+    involved_uids: List[str] = Field(default_factory=list)
+    location_uid: Optional[str] = None
+    x: float = 500.0
+    y: float = 500.0
 
 class RelationshipType(str, Enum):
     AGENCY = "agency"
