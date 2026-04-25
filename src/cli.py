@@ -1,7 +1,7 @@
 import os
 import shutil
 from .storage import CanvasState, get_available_canvases, SAVES_DIR
-from .models import Actor, Place, Item, Knowledge, Relationship, Importance, RelationshipType, Entity
+from .models import Actor, Place, Item, Knowledge, Relationship, DefaultImportance, RelationshipType, Entity
 
 def get_next_canvas_name(base_name: str) -> str:
     canvases = get_available_canvases()
@@ -37,7 +37,7 @@ def list_all_entities(state: CanvasState):
     idx = 1
     print("\n--- Actors ---")
     for e in state.actors:
-        print(f"{idx}. [{e.uid[:8]}] {e.name} (Actor, {e.importance.value})")
+        print(f"{idx}. [{e.uid[:8]}] {e.name} (Actor, {e.importance})")
         entities.append(e)
         idx += 1
     print("\n--- Places ---")
@@ -105,12 +105,19 @@ def run_cli():
         if cmd == "1":
             name = input("Enter actor name: ").strip()
             if not name: continue
-            print("\nImportance levels: 1. main, 2. secondary, 3. tertiary, 4. extra")
-            imp_choice = input("Select importance (1-4, default 4): ").strip()
-            importance = Importance.EXTRA
-            if imp_choice == "1": importance = Importance.MAIN
-            elif imp_choice == "2": importance = Importance.SECONDARY
-            elif imp_choice == "3": importance = Importance.TERTIARY
+            
+            print("\nImportance levels:")
+            for i, level in enumerate(state.settings.importance_levels):
+                print(f"{i+1}. {level}")
+            
+            imp_choice = input(f"Select importance (1-{len(state.settings.importance_levels)}, default {len(state.settings.importance_levels)}): ").strip()
+            importance = state.settings.importance_levels[-1]
+            try:
+                imp_idx = int(imp_choice) - 1
+                if 0 <= imp_idx < len(state.settings.importance_levels):
+                    importance = state.settings.importance_levels[imp_idx]
+            except:
+                pass
             
             attrs = input_attributes(state.settings.actor_attributes)
             state.save_entity(Actor(name=name, importance=importance, attributes=attrs))

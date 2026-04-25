@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 from enum import Enum
 import uuid
 
-class Importance(str, Enum):
+# We'll keep the Enum as a default/fallback, but allow dynamic strings
+class DefaultImportance(str, Enum):
     MAIN = "main"
     SECONDARY = "secondary"
     TERTIARY = "tertiary"
@@ -16,6 +17,14 @@ class AttributeTemplate(BaseModel):
     enabled: bool = True
 
 class CanvasSettings(BaseModel):
+    # Dynamic importance levels
+    importance_levels: List[str] = [
+        DefaultImportance.MAIN.value,
+        DefaultImportance.SECONDARY.value,
+        DefaultImportance.TERTIARY.value,
+        DefaultImportance.EXTRA.value
+    ]
+    
     # Recommended attributes for entities in this canvas
     actor_attributes: List[AttributeTemplate] = [
         AttributeTemplate(name="Personality"),
@@ -45,7 +54,7 @@ class Entity(BaseModel):
     y: float = 100.0
 
 class Actor(Entity):
-    importance: Importance = Importance.EXTRA
+    importance: str = DefaultImportance.EXTRA.value
 
 class Place(Entity):
     pass

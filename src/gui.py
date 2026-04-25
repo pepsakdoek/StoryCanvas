@@ -3,14 +3,14 @@ import shutil
 from typing import Optional, Dict, List, Type, Any
 from nicegui import ui, events
 from .storage import CanvasState, get_available_canvases, SAVES_DIR
-from .models import Actor, Place, Item, Knowledge, Relationship, Importance, RelationshipType, Entity, AttributeTemplate, CanvasSettings
+from .models import Actor, Place, Item, Knowledge, Relationship, DefaultImportance, RelationshipType, Entity, AttributeTemplate, CanvasSettings
 
 class StoryCanvasGUI:
     def __init__(self):
         self.state: Optional[CanvasState] = None
         self._setup_styles()
         self.container = ui.element('div').classes('w-full h-full')
-        self.importance_filter = {level: True for level in Importance}
+        self.importance_filter = {} 
         self.type_filter = {
             'Actor': True,
             'Place': True,
@@ -57,6 +57,7 @@ class StoryCanvasGUI:
                     padding: 8px;
                     user-select: none;
                     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+                    pointer-events: all;
                 }
                 .entity-actor { border-left: 6px solid #ef4444; }
                 .entity-place { border-left: 6px solid #22c55e; }
@@ -78,6 +79,7 @@ class StoryCanvasGUI:
                     const el = document.getElementById(id);
                     if (!el) return;
                     
+                    const rect = el.getBoundingClientRect();
                     const startX = e.clientX - el.offsetLeft;
                     const startY = e.clientY - el.offsetTop;
 
@@ -109,9 +111,6 @@ class StoryCanvasGUI:
             if e.uid == uid:
                 e.x, e.y = float(x), float(y)
                 self.state.save_entity(e)
-                # We don't necessarily need to refresh the whole canvas content here 
-                # because the JS already moved the element. 
-                # But we might want to redraw relationships.
                 self._draw_relationships()
                 break
 
@@ -131,6 +130,7 @@ class StoryCanvasGUI:
     def load_canvas(self, name: str):
         if not name: return
         self.state = CanvasState(name.strip())
+        self.importance_filter = {level: True for level in self.state.settings.importance_levels}
         self.build_canvas()
 
     def build_canvas(self):
@@ -161,7 +161,9 @@ class StoryCanvasGUI:
             ui.element('div').classes('grid-overlay')
             self._draw_relationships()
             if self.type_filter['Actor']:
-                for e in self.state.actors: self._add_entity_to_ui(e, 'entity-actor')
+                for e in self.state.actors:
+                    if self.importance_filter.get(e.importance, True):
+                        self._add_entity_to_ui(e, 'entity-actor')
             if self.type_filter['Place']:
                 for e in self.state.places: self._add_entity_to_ui(e, 'entity-place')
             if self.type_filter['Item']:
@@ -176,23 +178,67 @@ class StoryCanvasGUI:
             with card:
                 ui.label(entity.name).classes('font-bold mt-1')
                 if isinstance(entity, Actor):
-                    ui.label(entity.importance.value).classes('text-[10px] uppercase text-slate-400')
+                    ui.label(entity.importance).classes('text-[10px] uppercase text-slate-400')
                 with ui.context_menu():
+                    ui.menu_item('Edit Entity', on_click=lambda: self.edit_entity_dialog(entity))
+                    ui.menu_item('Edit Coordinates', on_click=lambda: self.edit_coords_dialog(entity))
                     ui.menu_item('Delete', on_click=lambda: self.delete_entity(entity))
             
-            # Using (e) => ... tells NiceGUI it is a JS handler.
             card.on('mousedown', f'(e) => window.startDrag(e, "{card.id}", "{entity.uid}")')
 
+    def edit_entity_dialog(self, entity):
+        etype = type(entity)
+        form = {
+            'name': entity.name,
+            'importance': getattr(entity, 'importance', None),
+            'attributes': entity.attributes.copy()
+        }
+        with ui.dialog() as dialog, ui.card().classes('w-96'):
+            ui.label(f'Edit {entity.name}').classes('text-h6')
+            ui.input('Name', value=form['name'], on_change=lambda e: form.update({'name': e.value})).classes('w-full')
+            
+            if etype == Actor:
+                ui.select(self.state.settings.importance_levels, 
+                          label='Importance', value=form['importance'],
+                          on_change=lambda e: form.update({'importance': e.value})).classes('w-full')
+            
+            ui.label('Attributes').classes('text-xs font-bold mt-4 uppercase text-slate-400')
+            attr_cont = ui.column().classes('w-full gap-1')
+            self._fill_attr_container(etype, attr_cont, form)
+            
+            with ui.row().classes('w-full justify-end mt-4'):
+                ui.button('Cancel', on_click=dialog.close).props('flat')
+                ui.button('Save', on_click=lambda: self._save_edited_entity(entity, form, dialog))
+        dialog.open()
+
+    def _save_edited_entity(self, entity, form, dialog):
+        entity.name = form['name']
+        if isinstance(entity, Actor):
+            entity.importance = form['importance']
+        entity.attributes = {k: v for k, v in form['attributes'].items() if v}
+        self.state.save_entity(entity)
+        self._refresh_canvas_content()
+        dialog.close()
+
+    def edit_coords_dialog(self, entity):
+        with ui.dialog() as dialog, ui.card():
+            ui.label(f'Coordinates for {entity.name}').classes('text-h6')
+            x_input = ui.number('X', value=entity.x).props('outlined dense')
+            y_input = ui.number('Y', value=entity.y).props('outlined dense')
+            with ui.row().classes('w-full justify-end'):
+                ui.button('Cancel', on_click=dialog.close).props('flat')
+                ui.button('Move', on_click=lambda: self._apply_coords(entity, x_input.value, y_input.value, dialog))
+        dialog.open()
+
+    def _apply_coords(self, entity, x, y, dialog):
+        entity.x, entity.y = float(x), float(y)
+        self.state.save_entity(entity)
+        self._refresh_canvas_content()
+        dialog.close()
+
     def _draw_relationships(self):
-        # We need to find elements or IDs. For simplicity, we redraw on state change.
-        # However, for smooth drag, we'd need to update these lines in JS.
-        # Redrawing them for now.
         all_ents = self.state.actors + self.state.places + self.state.items + self.state.knowledge
         uid_map = {e.uid: e for e in all_ents}
-        
-        # Clear existing lines (if we had a container for them)
-        # For now, _refresh_canvas_content clears everything.
-        
         for rel in self.state.relationships:
             src, dst = uid_map.get(rel.source_uid), uid_map.get(rel.target_uid)
             if src and dst:
@@ -207,14 +253,19 @@ class StoryCanvasGUI:
                     .tooltip(f"{rel.rel_type.value}: {rel.description}")
 
     def add_entity_dialog(self, default_type: Type[Entity] = Actor):
-        form = {'type': default_type, 'name': '', 'importance': Importance.EXTRA, 'attributes': {}}
+        form = {
+            'type': default_type, 
+            'name': '', 
+            'importance': self.state.settings.importance_levels[-1], 
+            'attributes': {}
+        }
         with ui.dialog() as dialog, ui.card().classes('w-96'):
             ui.label('Add Entity').classes('text-h6')
             type_sel = ui.select({Actor: 'Actor', Place: 'Place', Item: 'Item', Knowledge: 'Knowledge'}, 
                                 value=form['type'], on_change=lambda e: self._update_form_type(e.value, form, attr_cont, imp_sel))
             ui.input('Name', on_change=lambda e: form.update({'name': e.value}))
             
-            imp_sel = ui.select({i: i.value.capitalize() for i in Importance}, 
+            imp_sel = ui.select(self.state.settings.importance_levels, 
                                label='Importance', value=form['importance'],
                                on_change=lambda e: form.update({'importance': e.value}))
             imp_sel.bind_visibility_from(type_sel, 'value', value=Actor)
@@ -240,7 +291,9 @@ class StoryCanvasGUI:
         with container:
             for t in templates:
                 if t.enabled:
-                    ui.input(t.name, on_change=lambda e, n=t.name: form['attributes'].update({n: e.value})).props('dense outlined')
+                    initial_val = form['attributes'].get(t.name, '')
+                    ui.input(t.name, value=initial_val, 
+                             on_change=lambda e, n=t.name: form['attributes'].update({n: e.value})).props('dense outlined')
 
     def _save_entity(self, dialog, form):
         if not form['name']: return
@@ -274,15 +327,34 @@ class StoryCanvasGUI:
         with ui.dialog() as dialog, ui.card().classes('w-[500px]'):
             ui.label('Canvas Settings').classes('text-h6 mb-4')
             with ui.tabs() as tabs:
-                ui.tab('Actors'); ui.tab('Places'); ui.tab('Items'); ui.tab('Knowledge')
-            with ui.tab_panels(tabs, value='Actors').classes('w-full'):
+                ui.tab('General'); ui.tab('Actors'); ui.tab('Places'); ui.tab('Items'); ui.tab('Knowledge')
+            with ui.tab_panels(tabs, value='General').classes('w-full'):
+                with ui.tab_panel('General'):
+                    ui.label('Importance Levels').classes('font-bold')
+                    imp_cont = ui.column().classes('w-full gap-2')
+                    with imp_cont:
+                        for i, level in enumerate(self.state.settings.importance_levels):
+                            with ui.row().classes('w-full items-center'):
+                                def update_imp(e, idx=i): self.state.settings.importance_levels[idx] = e.value
+                                ui.input(value=level, on_change=update_imp).props('dense outlined').classes('flex-grow')
+                                def del_imp(idx=i): 
+                                    self.state.settings.importance_levels.pop(idx)
+                                    dialog.close(); self.edit_settings_dialog()
+                                ui.button(icon='delete', on_click=del_imp).props('flat color=negative')
+                        ui.button('Add Level', on_click=lambda: self._add_imp_level(dialog)).props('flat icon=add')
+
                 with ui.tab_panel('Actors'): self._build_settings_panel(self.state.settings.actor_attributes, dialog)
                 with ui.tab_panel('Places'): self._build_settings_panel(self.state.settings.place_attributes, dialog)
                 with ui.tab_panel('Items'): self._build_settings_panel(self.state.settings.item_attributes, dialog)
                 with ui.tab_panel('Knowledge'): self._build_settings_panel(self.state.settings.knowledge_attributes, dialog)
+            
             with ui.row().classes('w-full justify-end mt-4'):
                 ui.button('Save', on_click=lambda: self._save_settings(dialog))
         dialog.open()
+
+    def _add_imp_level(self, dialog):
+        self.state.settings.importance_levels.append("new level")
+        dialog.close(); self.edit_settings_dialog()
 
     def _build_settings_panel(self, templates: List[AttributeTemplate], dialog):
         with ui.column().classes('w-full gap-2'):
@@ -294,9 +366,7 @@ class StoryCanvasGUI:
 
     def _add_empty_attr(self, templates, dialog):
         templates.append(AttributeTemplate(name="New Attribute"))
-        # Close and reopen to refresh the dialog UI correctly
-        dialog.close()
-        self.edit_settings_dialog()
+        dialog.close(); self.edit_settings_dialog()
 
     def _save_settings(self, dialog):
         self.state.save_settings(self.state.settings)
