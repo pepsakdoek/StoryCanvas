@@ -74,38 +74,28 @@ class StoryCanvasGUI:
                 }
             </style>
             <script>
-                class Draggable {
-                    constructor(el, uid) {
-                        this.el = el;
-                        this.uid = uid;
-                        this.onMouseDown = this.onMouseDown.bind(this);
-                        this.onMouseMove = this.onMouseMove.bind(this);
-                        this.onMouseUp = this.onMouseUp.bind(this);
-                        this.el.addEventListener('mousedown', this.onMouseDown);
-                    }
-                    onMouseDown(e) {
-                        if (e.target.closest('.context-menu')) return;
-                        e.preventDefault();
-                        this.startX = e.clientX - this.el.offsetLeft;
-                        this.startY = e.clientY - this.el.offsetTop;
-                        document.addEventListener('mousemove', this.onMouseMove);
-                        document.addEventListener('mouseup', this.onMouseUp);
-                    }
-                    onMouseMove(e) {
-                        this.el.style.left = (e.clientX - this.startX) + 'px';
-                        this.el.style.top = (e.clientY - this.startY) + 'px';
-                    }
-                    onMouseUp(e) {
-                        document.removeEventListener('mousemove', this.onMouseMove);
-                        document.removeEventListener('mouseup', this.onMouseUp);
-                        const x = parseInt(this.el.style.left);
-                        const y = parseInt(this.el.style.top);
-                        emitEvent('update_entity_pos', {uid: this.uid, x: x, y: y});
-                    }
-                }
-                window.initDraggable = (id, uid) => {
+                window.startDrag = (e, id, uid) => {
                     const el = document.getElementById(id);
-                    if (el) new Draggable(el, uid);
+                    if (!el) return;
+                    
+                    const startX = e.clientX - el.offsetLeft;
+                    const startY = e.clientY - el.offsetTop;
+
+                    const move = (moveEvent) => {
+                        el.style.left = (moveEvent.clientX - startX) + 'px';
+                        el.style.top = (moveEvent.clientY - startY) + 'px';
+                    };
+
+                    const stop = () => {
+                        document.removeEventListener('mousemove', move);
+                        document.removeEventListener('mouseup', stop);
+                        const x = parseInt(el.style.left);
+                        const y = parseInt(el.style.top);
+                        emitEvent('update_entity_pos', {uid: uid, x: x, y: y});
+                    };
+
+                    document.addEventListener('mousemove', move);
+                    document.addEventListener('mouseup', stop);
                 };
             </script>
         ''')
@@ -119,7 +109,10 @@ class StoryCanvasGUI:
             if e.uid == uid:
                 e.x, e.y = float(x), float(y)
                 self.state.save_entity(e)
-                self._refresh_canvas_content()
+                # We don't necessarily need to refresh the whole canvas content here 
+                # because the JS already moved the element. 
+                # But we might want to redraw relationships.
+                self._draw_relationships()
                 break
 
     def build_selector(self):
@@ -182,14 +175,24 @@ class StoryCanvasGUI:
                 .style(f'left: {entity.x}px; top: {entity.y}px')
             with card:
                 ui.label(entity.name).classes('font-bold mt-1')
+                if isinstance(entity, Actor):
+                    ui.label(entity.importance.value).classes('text-[10px] uppercase text-slate-400')
                 with ui.context_menu():
                     ui.menu_item('Delete', on_click=lambda: self.delete_entity(entity))
-            # Execute JS to initialize draggable
-            ui.run_javascript(f'window.initDraggable("{card.id}", "{entity.uid}")')
+            
+            # Using (e) => ... tells NiceGUI it is a JS handler.
+            card.on('mousedown', f'(e) => window.startDrag(e, "{card.id}", "{entity.uid}")')
 
     def _draw_relationships(self):
+        # We need to find elements or IDs. For simplicity, we redraw on state change.
+        # However, for smooth drag, we'd need to update these lines in JS.
+        # Redrawing them for now.
         all_ents = self.state.actors + self.state.places + self.state.items + self.state.knowledge
         uid_map = {e.uid: e for e in all_ents}
+        
+        # Clear existing lines (if we had a container for them)
+        # For now, _refresh_canvas_content clears everything.
+        
         for rel in self.state.relationships:
             src, dst = uid_map.get(rel.source_uid), uid_map.get(rel.target_uid)
             if src and dst:
@@ -208,8 +211,14 @@ class StoryCanvasGUI:
         with ui.dialog() as dialog, ui.card().classes('w-96'):
             ui.label('Add Entity').classes('text-h6')
             type_sel = ui.select({Actor: 'Actor', Place: 'Place', Item: 'Item', Knowledge: 'Knowledge'}, 
-                                value=form['type'], on_change=lambda e: self._update_form_type(e.value, form, attr_cont))
+                                value=form['type'], on_change=lambda e: self._update_form_type(e.value, form, attr_cont, imp_sel))
             ui.input('Name', on_change=lambda e: form.update({'name': e.value}))
+            
+            imp_sel = ui.select({i: i.value.capitalize() for i in Importance}, 
+                               label='Importance', value=form['importance'],
+                               on_change=lambda e: form.update({'importance': e.value}))
+            imp_sel.bind_visibility_from(type_sel, 'value', value=Actor)
+            
             attr_cont = ui.column().classes('w-full gap-1')
             self._fill_attr_container(form['type'], attr_cont, form)
             with ui.row().classes('w-full justify-end mt-4'):
@@ -217,7 +226,7 @@ class StoryCanvasGUI:
                 ui.button('Save', on_click=lambda: self._save_entity(dialog, form))
         dialog.open()
 
-    def _update_form_type(self, new_type, form, container):
+    def _update_form_type(self, new_type, form, container, imp_sel):
         form['type'] = new_type
         container.clear()
         self._fill_attr_container(new_type, container, form)
@@ -267,15 +276,15 @@ class StoryCanvasGUI:
             with ui.tabs() as tabs:
                 ui.tab('Actors'); ui.tab('Places'); ui.tab('Items'); ui.tab('Knowledge')
             with ui.tab_panels(tabs, value='Actors').classes('w-full'):
-                with ui.tab_panel('Actors'): self._build_settings_panel(self.state.settings.actor_attributes)
-                with ui.tab_panel('Places'): self._build_settings_panel(self.state.settings.place_attributes)
-                with ui.tab_panel('Items'): self._build_settings_panel(self.state.settings.item_attributes)
-                with ui.tab_panel('Knowledge'): self._build_settings_panel(self.state.settings.knowledge_attributes)
+                with ui.tab_panel('Actors'): self._build_settings_panel(self.state.settings.actor_attributes, dialog)
+                with ui.tab_panel('Places'): self._build_settings_panel(self.state.settings.place_attributes, dialog)
+                with ui.tab_panel('Items'): self._build_settings_panel(self.state.settings.item_attributes, dialog)
+                with ui.tab_panel('Knowledge'): self._build_settings_panel(self.state.settings.knowledge_attributes, dialog)
             with ui.row().classes('w-full justify-end mt-4'):
                 ui.button('Save', on_click=lambda: self._save_settings(dialog))
         dialog.open()
 
-    def _build_settings_panel(self, templates: List[AttributeTemplate]):
+    def _build_settings_panel(self, templates: List[AttributeTemplate], dialog):
         with ui.column().classes('w-full gap-2'):
             for t in templates:
                 with ui.row().classes('w-full items-center justify-between'):
@@ -285,7 +294,9 @@ class StoryCanvasGUI:
 
     def _add_empty_attr(self, templates, dialog):
         templates.append(AttributeTemplate(name="New Attribute"))
-        dialog.close(); self.edit_settings_dialog()
+        # Close and reopen to refresh the dialog UI correctly
+        dialog.close()
+        self.edit_settings_dialog()
 
     def _save_settings(self, dialog):
         self.state.save_settings(self.state.settings)
