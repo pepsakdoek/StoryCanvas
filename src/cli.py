@@ -13,16 +13,18 @@ def get_next_canvas_name(base_name: str) -> str:
         i += 1
     return f"{base_name}_{i}"
 
-def input_attributes(templates, state_config):
+def input_attributes(templates):
     attributes = {}
     print("\nEnter attributes (leave name empty to stop):")
     for template in templates:
+        if not template.enabled:
+            continue
         val = input(f"{template.name}: ").strip()
         if val:
             attributes[template.name] = val
     
     while True:
-        attr_name = input("Custom attribute name: ").strip()
+        attr_name = input("Custom attribute name (or Enter to finish): ").strip()
         if not attr_name:
             break
         attr_val = input(f"{attr_name} value: ").strip()
@@ -110,25 +112,25 @@ def run_cli():
             elif imp_choice == "2": importance = Importance.SECONDARY
             elif imp_choice == "3": importance = Importance.TERTIARY
             
-            attrs = input_attributes(state.config.actor_attributes, state.config)
+            attrs = input_attributes(state.settings.actor_attributes)
             state.save_entity(Actor(name=name, importance=importance, attributes=attrs))
         
         elif cmd == "2":
             name = input("Enter place name: ").strip()
             if not name: continue
-            attrs = input_attributes(state.config.place_attributes, state.config)
+            attrs = input_attributes(state.settings.place_attributes)
             state.save_entity(Place(name=name, attributes=attrs))
 
         elif cmd == "3":
             name = input("Enter item name: ").strip()
             if not name: continue
-            attrs = input_attributes(state.config.item_attributes, state.config)
+            attrs = input_attributes(state.settings.item_attributes)
             state.save_entity(Item(name=name, attributes=attrs))
 
         elif cmd == "4":
             name = input("Enter knowledge/fact: ").strip()
             if not name: continue
-            attrs = input_attributes(state.config.knowledge_attributes, state.config)
+            attrs = input_attributes(state.settings.knowledge_attributes)
             state.save_entity(Knowledge(name=name, attributes=attrs))
 
         elif cmd == "5":

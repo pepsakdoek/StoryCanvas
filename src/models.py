@@ -13,8 +13,9 @@ class AttributeTemplate(BaseModel):
     name: str
     description: str = ""
     required: bool = False
+    enabled: bool = True
 
-class CanvasConfig(BaseModel):
+class CanvasSettings(BaseModel):
     # Recommended attributes for entities in this canvas
     actor_attributes: List[AttributeTemplate] = [
         AttributeTemplate(name="Personality"),

@@ -1,7 +1,8 @@
 import os
 import json
+import shutil
 from typing import List, Dict, Type, TypeVar, Any, Optional
-from .models import Actor, Place, Item, Knowledge, Relationship, CanvasConfig, Entity
+from .models import Actor, Place, Item, Knowledge, Relationship, CanvasSettings, Entity
 
 SAVES_DIR = "save"
 os.makedirs(SAVES_DIR, exist_ok=True)
@@ -14,34 +15,39 @@ class CanvasState:
         self.path = os.path.join(SAVES_DIR, name)
         os.makedirs(self.path, exist_ok=True)
         
-        self.config_file = os.path.join(self.path, "Config.json")
+        self.settings_file = os.path.join(self.path, "settings.json")
         self.actors_file = os.path.join(self.path, "Actors.json")
         self.places_file = os.path.join(self.path, "Places.json")
         self.items_file = os.path.join(self.path, "Items.json")
         self.knowledge_file = os.path.join(self.path, "Knowledge.json")
         self.relationships_file = os.path.join(self.path, "Relationships.json")
         
-        self.config = self.load_config()
+        # Migration from Config.json to settings.json
+        old_config = os.path.join(self.path, "Config.json")
+        if os.path.exists(old_config) and not os.path.exists(self.settings_file):
+            shutil.move(old_config, self.settings_file)
+
+        self.settings = self.load_settings()
         self.actors: List[Actor] = self._load_entities(self.actors_file, Actor)
         self.places: List[Place] = self._load_entities(self.places_file, Place)
         self.items: List[Item] = self._load_entities(self.items_file, Item)
         self.knowledge: List[Knowledge] = self._load_entities(self.knowledge_file, Knowledge)
         self.relationships: List[Relationship] = self._load_relationships()
 
-    def load_config(self) -> CanvasConfig:
-        if os.path.exists(self.config_file):
-            with open(self.config_file, "r") as f:
+    def load_settings(self) -> CanvasSettings:
+        if os.path.exists(self.settings_file):
+            with open(self.settings_file, "r") as f:
                 try:
-                    return CanvasConfig(**json.load(f))
+                    return CanvasSettings(**json.load(f))
                 except:
-                    return CanvasConfig()
-        config = CanvasConfig()
-        self.save_config(config)
-        return config
+                    return CanvasSettings()
+        settings = CanvasSettings()
+        self.save_settings(settings)
+        return settings
 
-    def save_config(self, config: CanvasConfig):
-        with open(self.config_file, "w") as f:
-            json.dump(config.model_dump(), f, indent=4)
+    def save_settings(self, settings: CanvasSettings):
+        with open(self.settings_file, "w") as f:
+            json.dump(settings.model_dump(), f, indent=4)
 
     def _load_entities(self, file_path: str, model_class: Type[T]) -> List[T]:
         if os.path.exists(file_path):
@@ -86,7 +92,6 @@ class CanvasState:
             self._persist_entities(self.knowledge_file, self.knowledge)
 
     def save_relationship(self, rel: Relationship):
-        # Relationship updates are less common but let's be consistent
         for i, existing in enumerate(self.relationships):
             if existing.uid == rel.uid:
                 self.relationships[i] = rel
