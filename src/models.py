@@ -15,7 +15,7 @@ class AttributeTemplate(BaseModel):
     required: bool = False
 
 class CanvasConfig(BaseModel):
-    # Recommended attributes for actors in this canvas
+    # Recommended attributes for entities in this canvas
     actor_attributes: List[AttributeTemplate] = [
         AttributeTemplate(name="Personality"),
         AttributeTemplate(name="Likes"),
@@ -23,12 +23,48 @@ class CanvasConfig(BaseModel):
         AttributeTemplate(name="Secret"),
         AttributeTemplate(name="Weakness"),
     ]
+    place_attributes: List[AttributeTemplate] = [
+        AttributeTemplate(name="Atmosphere"),
+        AttributeTemplate(name="History"),
+    ]
+    item_attributes: List[AttributeTemplate] = [
+        AttributeTemplate(name="Condition"),
+        AttributeTemplate(name="Value"),
+    ]
+    knowledge_attributes: List[AttributeTemplate] = [
+        AttributeTemplate(name="Source"),
+        AttributeTemplate(name="Certainty"),
+    ]
 
-class Actor(BaseModel):
+class Entity(BaseModel):
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    importance: Importance = Importance.EXTRA
-    # Flexible attributes: { "Attribute Name": "Value" }
     attributes: Dict[str, str] = Field(default_factory=dict)
     x: float = 100.0
     y: float = 100.0
+
+class Actor(Entity):
+    importance: Importance = Importance.EXTRA
+
+class Place(Entity):
+    pass
+
+class Item(Entity):
+    pass
+
+class Knowledge(Entity):
+    pass
+
+class RelationshipType(str, Enum):
+    AGENCY = "agency"
+    CAUSALITY = "causality"
+    SENTIMENT = "sentiment"
+    CHRONOTOPE = "chronotope"
+
+class Relationship(BaseModel):
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    source_uid: str
+    target_uid: str
+    rel_type: RelationshipType
+    description: str
+    attributes: Dict[str, str] = Field(default_factory=dict)

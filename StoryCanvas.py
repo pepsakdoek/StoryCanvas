@@ -3,7 +3,7 @@ import sys
 import datetime
 import os
 from src.cli import run_cli
-from src.gui import run_gui
+from src.gui import run_gui 
 
 def setup_logging():
     # Create logs directory if it doesn't exist
