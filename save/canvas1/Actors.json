@@ -2,6 +2,15 @@
     {
         "uid": "9209e59d-a036-42f5-8dfe-febfab66d344",
         "name": "Sansa",
-        "description": "Sansa is female"
+        "description": "Sansa is female",
+        "x": 100.0,
+        "y": 100.0
+    },
+    {
+        "uid": "5e30d7af-ab0f-4b14-a179-10422d96f039",
+        "name": "Brian Stark",
+        "description": "Brother of Sansa",
+        "x": 150.0,
+        "y": 150.0
     }
 ]

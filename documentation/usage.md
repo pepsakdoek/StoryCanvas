@@ -1,10 +1,10 @@
 # Usage Guide
 
-This document explains how to use the Bard Blank Canvas Narrative Engine interfaces.
+This document explains how to use the StoryCanvas Blank Canvas Narrative Engine interfaces.
 
 ## Interfaces
 
-Bard provides two ways to interact with the engine: a Graphical User Interface (GUI) and a Command Line Interface (CLI).
+StoryCanvas provides two ways to interact with the engine: a Graphical User Interface (GUI) and a Command Line Interface (CLI).
 
 ### Graphical User Interface (GUI)
 
@@ -12,7 +12,7 @@ The GUI is the default mode when running the application. It provides a blank ca
 
 **How to run:**
 ```bash
-uv run bard.py
+uv run StoryCanvas.py
 ```
 
 **Features:**
@@ -28,7 +28,7 @@ The CLI is useful for quick data entry or automated testing.
 
 **How to run:**
 ```bash
-uv run bard.py --cli
+uv run StoryCanvas.py --cli
 ```
 
 **Features:**

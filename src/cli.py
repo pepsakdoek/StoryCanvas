@@ -2,7 +2,7 @@ from .storage import CanvasState, get_available_canvases
 from .models import Actor
 
 def run_cli():
-    print("--- Bard CLI ---")
+    print("--- StoryCanvas CLI ---")
     canvases = get_available_canvases()
     
     print("\nAvailable Canvases:")

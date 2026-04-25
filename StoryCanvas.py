@@ -3,7 +3,7 @@ from src.cli import run_cli
 from src.gui import run_gui
 
 def main():
-    parser = argparse.ArgumentParser(description="Bard: Blank Canvas Narrative Engine")
+    parser = argparse.ArgumentParser(description="StoryCanvas: Blank Canvas Narrative Engine")
     parser.add_argument("--cli", action="store_true", help="Run in CLI mode")
     args = parser.parse_args()
 

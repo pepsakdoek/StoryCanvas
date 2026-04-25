@@ -4,37 +4,13 @@ from nicegui import ui
 from .storage import CanvasState, get_available_canvases
 from .models import Actor
 
-class BardGUI:
+class StoryCanvasGUI:
     def __init__(self):
         self.state: Optional[CanvasState] = None
-        self.canvas_container = None
+        self._setup_styles()
+        self.container = ui.element('div').classes('w-full h-full')
 
-    def build_selector(self):
-        ui.clear()
-        with ui.card().classes('absolute-center w-96 p-8'):
-            ui.label('Bard: Select Canvas').classes('text-h5 mb-4')
-            canvases = get_available_canvases()
-            
-            with ui.column().classes('w-full gap-2'):
-                for name in canvases:
-                    ui.button(name, on_click=lambda n=name: self.load_canvas(n)).classes('w-full')
-                
-                ui.separator().classes('my-4')
-                
-                new_name_input = ui.input('New Canvas Name').classes('w-full')
-                ui.button('Create & Open', on_click=lambda: self.load_canvas(new_name_input.value)).classes('w-full')
-
-    def load_canvas(self, name: str):
-        if not name or not name.strip():
-            ui.notify("Name is required", type='negative')
-            return
-        self.state = CanvasState(name.strip())
-        self.build_canvas()
-
-    def build_canvas(self):
-        ui.clear()
-        
-        # Grid Styles
+    def _setup_styles(self):
         ui.add_head_html('''
             <style>
                 .canvas-container {
@@ -77,20 +53,47 @@ class BardGUI:
             </style>
         ''')
 
-        self.canvas_container = ui.element('div').classes('canvas-container')
-        with self.canvas_container:
-            ui.element('div').classes('grid-overlay')
-            
-            # Initial load of actors
-            for actor in self.state.actors:
-                self.add_actor_to_ui(actor)
+    def build_selector(self):
+        self.container.clear()
+        with self.container:
+            with ui.card().classes('absolute-center w-96 p-8'):
+                ui.label('StoryCanvas: Select Canvas').classes('text-h5 mb-4')
+                canvases = get_available_canvases()
+                
+                with ui.column().classes('w-full gap-2'):
+                    for name in canvases:
+                        ui.button(name, on_click=lambda n=name: self.load_canvas(n)).classes('w-full')
+                    
+                    ui.separator().classes('my-4')
+                    
+                    new_name_input = ui.input('New Canvas Name').classes('w-full')
+                    ui.button('Create & Open', on_click=lambda: self.load_canvas(new_name_input.value)).classes('w-full')
 
-            # Context Menu (Scope it to the container)
-            with ui.context_menu():
-                ui.menu_item('Add Actor', on_click=self.add_actor_dialog)
-                ui.separator()
-                ui.menu_item('Back to Menu', on_click=self.build_selector)
-                ui.menu_item('Exit', on_click=lambda: os._exit(0))
+    def load_canvas(self, name: str):
+        if not name or not name.strip():
+            ui.notify("Name is required", type='negative')
+            return
+        self.state = CanvasState(name.strip())
+        self.build_canvas()
+
+    def build_canvas(self):
+        self.container.clear()
+        
+        with self.container:
+            self.canvas_container = ui.element('div').classes('canvas-container')
+            with self.canvas_container:
+                ui.element('div').classes('grid-overlay')
+                
+                # Initial load of actors
+                for actor in self.state.actors:
+                    self.add_actor_to_ui(actor)
+
+                # Context Menu (Scope it to the container)
+                with ui.context_menu():
+                    ui.menu_item('Add Actor', on_click=self.add_actor_dialog)
+                    ui.separator()
+                    ui.menu_item('Back to Menu', on_click=self.build_selector)
+                    ui.menu_item('Exit', on_click=lambda: os._exit(0))
 
     def add_actor_to_ui(self, actor: Actor):
         with self.canvas_container:
@@ -119,6 +122,6 @@ class BardGUI:
             ui.notify("Name is required", type='negative')
 
 def run_gui():
-    gui = BardGUI()
+    gui = StoryCanvasGUI()
     gui.build_selector()
-    ui.run(title="Bard Canvas", port=8080, show=True)
+    ui.run(title="StoryCanvas", port=8080, show=True)
