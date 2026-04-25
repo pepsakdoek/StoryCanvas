@@ -5,6 +5,8 @@ A data-driven, emergent narrative game. The goal is to provide a "blank canvas" 
 
 ## Core Components (The Data Structure)
 - **Entities (Nouns):** Actors, Places, Items, and Knowledge.
+    - **Modular Attributes:** Entities have a flexible attribute system. Only `importance` is mandatory for Actors. All other traits (personality, secrets, etc.) are dynamic key-value pairs.
+    - **Attribute Schema:** Each canvas can define a list of "recommended" or "required" attribute templates to guide the user.
 - **Relationships (Verbs):** Agency, Causality, Sentiment, and Chronotopes.
 - **Hierarchy:** Fractal scaling for locations (Room > Building > Town > World).
 - **The Registry:** A centralized UID-based system to track all world states.

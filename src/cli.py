@@ -1,5 +1,5 @@
 from .storage import CanvasState, get_available_canvases
-from .models import Actor
+from .models import Actor, Importance
 
 def run_cli():
     print("--- StoryCanvas CLI ---")
@@ -44,12 +44,41 @@ def run_cli():
             if not name:
                 print("Error: Name is required.")
                 continue
-            description = input("Enter actor description: ").strip()
-            actor = Actor(name=name, description=description)
+            
+            print("\nImportance levels:")
+            for i, level in enumerate(Importance):
+                print(f"{i+1}. {level.value}")
+            imp_choice = input("Select importance (number, default 4): ").strip()
+            importance = Importance.EXTRA
+            try:
+                imp_idx = int(imp_choice) - 1
+                importance = list(Importance)[imp_idx]
+            except:
+                pass
+
+            attributes = {}
+            print("\nEnter attributes (leave name empty to stop):")
+            # First suggest from config
+            for template in state.config.actor_attributes:
+                val = input(f"{template.name}: ").strip()
+                if val:
+                    attributes[template.name] = val
+            
+            # Then allow custom
+            while True:
+                attr_name = input("Custom attribute name: ").strip()
+                if not attr_name:
+                    break
+                attr_val = input(f"{attr_name} value: ").strip()
+                if attr_val:
+                    attributes[attr_name] = attr_val
+
+            actor = Actor(name=name, importance=importance, attributes=attributes)
             state.save_actor(actor)
             print(f"Added: {name}")
         elif cmd == "2":
             for a in state.actors:
-                print(f"- {a.name}: {a.description} ({a.uid})")
+                attr_str = ", ".join([f"{k}: {v}" for k, v in a.attributes.items()])
+                print(f"- {a.name} [{a.importance.value}]: {attr_str} ({a.uid})")
         elif cmd == "3":
             break
