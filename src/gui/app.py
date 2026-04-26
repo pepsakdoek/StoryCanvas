@@ -2,7 +2,7 @@ import os
 import shutil
 import uuid
 from typing import Optional, Dict, List, Type, Any
-from nicegui import ui, events
+from nicegui import app, ui, events
 from ..storage import CanvasState, get_available_canvases, SAVES_DIR
 from ..models import EntityIdentity, EntityState, Event, Relationship, DefaultImportance, RelationshipType, AttributeTemplate, CanvasSettings
 from .styles import setup_styles
@@ -39,6 +39,22 @@ class StoryCanvasGUI:
                     ui.separator().classes('my-4')
                     new_name = ui.input('New Canvas Name').classes('w-full')
                     ui.button('Create', on_click=lambda: self.load_canvas(new_name.value)).classes('w-full')
+                    ui.separator().classes('my-2')
+                    with ui.row().classes('w-full gap-2'):
+                        ui.button('Help', on_click=self.show_help).classes('grow').props('outline color=blue')
+                        ui.button('Exit', on_click=app.shutdown).classes('grow').props('outline color=red')
+
+    def show_help(self):
+        try:
+            with open('documentation/usage.md', 'r', encoding='utf-8') as f:
+                content = f.read()
+        except FileNotFoundError:
+            content = "Usage guide not found."
+        
+        with ui.dialog() as dialog, ui.card().classes('w-[600px] max-w-full'):
+            ui.markdown(content)
+            ui.button('Close', on_click=dialog.close).classes('w-full mt-4')
+        dialog.open()
 
     def load_canvas(self, name: str):
         if not name: return

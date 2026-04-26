@@ -94,36 +94,33 @@ class CanvasState:
         return uid
 
     def auto_arrange(self):
-        """Deterministically arranges entities on the canvas based on type and relationships."""
+        """Deterministically arranges entities on the canvas with generous spacing."""
         sorted_uids = sorted(self.registry.entities.keys())
         
-        # 1. Arrange Places in a grid (Mental Map)
+        # 1. Arrange Places in a grid (Mental Map) - Centered and wide
         places = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Place"]
-        place_coords = {}
         for i, uid in enumerate(places):
             col, row = i % 3, i // 3
-            x, y = 300 + col * 250, 300 + row * 200
-            place_coords[uid] = (x, y)
+            # Spacing doubled: 250 -> 500, 200 -> 400. Starting lower at 400.
+            x, y = 300 + col * 500, 400 + row * 400
             if uid in self.entity_states:
                 self.entity_states[uid].x, self.entity_states[uid].y = x, y
 
-        # 2. Arrange Actors at the top
+        # 2. Arrange Actors at the top - Staggered
         actors = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Actor"]
-        # Sort actors by importance (main first) then by ID
         actors.sort(key=lambda u: (self.registry.entities[u].importance, u))
         for i, uid in enumerate(actors):
-            col, row = i % 6, i // 6
-            x, y = 100 + col * 150, 50 + row * 120
+            col, row = i % 5, i // 5
+            # Spacing doubled: 150 -> 300, 120 -> 240. Starting at y=120 to clear header.
+            x, y = 100 + col * 300, 120 + row * 240
             if uid in self.entity_states:
                 self.entity_states[uid].x, self.entity_states[uid].y = x, y
 
         # 3. Arrange Items near owners or locations
         items = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Item"]
         for uid in items:
-            # Find owner (possession) or location
-            anchor_x, anchor_y = 800, 100 # Default fallback
+            anchor_x, anchor_y = 1500, 120 # Default fallback
             
-            # Priority: 1. Owned by Actor, 2. Located in Place
             related_actor = next((r.source_uid for r in self.relationships 
                                  if r.target_uid == uid and r.rel_type == RelationshipType.POSSESSION), None)
             if not related_actor:
@@ -137,16 +134,17 @@ class CanvasState:
 
             if anchor_uid and anchor_uid in self.entity_states:
                 anchor_x = self.entity_states[anchor_uid].x
-                anchor_y = self.entity_states[anchor_uid].y + 85 # Position just below
+                # Positioned slightly further down to avoid overlapping labels
+                anchor_y = self.entity_states[anchor_uid].y + 120 
             
             if uid in self.entity_states:
                 self.entity_states[uid].x, self.entity_states[uid].y = anchor_x, anchor_y
 
-        # 4. Knowledge (Scatter on the right)
+        # 4. Knowledge (Scatter on the far right)
         knowledge = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Knowledge"]
         for i, uid in enumerate(knowledge):
             col, row = i % 2, i // 2
-            x, y = 1000 + col * 150, 50 + row * 120
+            x, y = 2000 + col * 300, 120 + row * 240
             if uid in self.entity_states:
                 self.entity_states[uid].x, self.entity_states[uid].y = x, y
 

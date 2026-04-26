@@ -13,11 +13,19 @@ A data-driven, emergent narrative game. The goal is to provide a "blank canvas" 
 
 ## Technical Stack
 - **Language:** Python 3.12+ (managed via `uv`).
+    - Use `uv run python StoryCanvas.py` to start the application.
+    - Use `uv run python StoryCanvas.py --cli` for CLI mode.
 - **UI:** NiceGUI (for a reactive, web-based dashboard).
 - **Data Structures:** json files so that they are vaguely human readable and quickly parsable by cli and a programming language.
 - **Data Validation:** pydantic will make sure the json created by llms or other code is valid and can be inserted into the files.
 - **Intelligence:** Gemini API (cloud) and Ollama (local) for narrative generation and "Lucky" button flavors.
 - **Interface:** Dual-mode (Web UI + CLI for agent-based testing).
+
+## Development Notes
+- **Execution:** Always prefer `uv run` to ensure dependencies like `nicegui` and `pydantic` are correctly resolved from the virtual environment.
+- **Main Menu:** Includes 'Create', 'Load', 'Help' (opens `documentation/usage.md`), and 'Exit' (shuts down the server).
+- **Documentation:** `documentation/usage.md` contains the primary end-user guide.
+- **Logs:** Application logs are automatically generated in the `/logs` directory with timestamps.
 
 ## Folder Architecture
 The "Canvas" uses a hierarchical directory structure. This allows for persistent "World" data while keeping individual "Stories" modular.
