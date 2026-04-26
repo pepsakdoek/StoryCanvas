@@ -1,21 +1,23 @@
 import os
 import shutil
+import uuid
 from .storage import CanvasState, get_available_canvases, SAVES_DIR
-from .models import Actor, Place, Item, Knowledge, Relationship, DefaultImportance, RelationshipType, Entity
+from .models import Relationship, DefaultImportance, RelationshipType, EntityIdentity, EntityState
 
 def get_next_canvas_name(base_name: str) -> str:
     canvases = get_available_canvases()
-    if base_name not in canvases:
-        return base_name
-    
+    # If base_name is "MyWorld", try "MyWorld_1", "MyWorld_2", etc.
+    name = base_name.split('_')[0]
     i = 1
-    while f"{base_name}_{i}" in canvases:
+    while f"{name}_{i}" in canvases:
         i += 1
-    return f"{base_name}_{i}"
+    return f"{name}_{i}"
 
 def input_attributes(templates):
     attributes = {}
-    print("\nEnter attributes (leave name empty to stop):")
+    if not templates:
+        return attributes
+    print("\nEnter attributes (leave empty to skip):")
     for template in templates:
         if not template.enabled:
             continue
@@ -34,27 +36,30 @@ def input_attributes(templates):
 
 def list_all_entities(state: CanvasState):
     entities = []
+    # Collect all identities from registry that have state in current slot
+    # For CLI, let's just list everything in the registry that is active in this slot
     idx = 1
-    print("\n--- Actors ---")
-    for e in state.actors:
-        print(f"{idx}. [{e.uid[:8]}] {e.name} (Actor, {e.importance})")
-        entities.append(e)
-        idx += 1
-    print("\n--- Places ---")
-    for e in state.places:
-        print(f"{idx}. [{e.uid[:8]}] {e.name} (Place)")
-        entities.append(e)
-        idx += 1
-    print("\n--- Items ---")
-    for e in state.items:
-        print(f"{idx}. [{e.uid[:8]}] {e.name} (Item)")
-        entities.append(e)
-        idx += 1
-    print("\n--- Knowledge ---")
-    for e in state.knowledge:
-        print(f"{idx}. [{e.uid[:8]}] {e.name} (Knowledge)")
-        entities.append(e)
-        idx += 1
+    print("\n--- Entities ---")
+    
+    # Group by type for better display
+    by_type = {}
+    for uid, s in state.entity_states.items():
+        identity = state.registry.entities.get(uid)
+        if identity:
+            etype = identity.entity_type
+            if etype not in by_type: by_type[etype] = []
+            by_type[etype].append((identity, s))
+
+    for etype in sorted(by_type.keys()):
+        print(f"\n[{etype}s]")
+        for identity, s in by_type[etype]:
+            info = f"{idx}. [{identity.uid[:8]}] {identity.name}"
+            if identity.entity_type == 'Actor':
+                info += f" ({identity.importance})"
+            print(info)
+            entities.append(identity)
+            idx += 1
+            
     return entities
 
 def run_cli():
@@ -97,9 +102,8 @@ def run_cli():
         print("4. Add Knowledge")
         print("5. Add Relationship")
         print("6. List Everything")
-        print("7. Create New Version (Numbered Save)")
-        print("8. Delete this Canvas and Restart")
-        print("9. Exit")
+        print("7. Create New Version (Slot-based clone)")
+        print("8. Exit")
         cmd = input("Select action: ").strip()
         
         if cmd == "1":
@@ -120,25 +124,18 @@ def run_cli():
                 pass
             
             attrs = input_attributes(state.settings.actor_attributes)
-            state.save_entity(Actor(name=name, importance=importance, attributes=attrs))
+            state.create_entity(name, "Actor", importance, attrs)
         
-        elif cmd == "2":
-            name = input("Enter place name: ").strip()
+        elif cmd in ["2", "3", "4"]:
+            etype = {"2": "Place", "3": "Item", "4": "Knowledge"}[cmd]
+            name = input(f"Enter {etype.lower()} name: ").strip()
             if not name: continue
-            attrs = input_attributes(state.settings.place_attributes)
-            state.save_entity(Place(name=name, attributes=attrs))
-
-        elif cmd == "3":
-            name = input("Enter item name: ").strip()
-            if not name: continue
-            attrs = input_attributes(state.settings.item_attributes)
-            state.save_entity(Item(name=name, attributes=attrs))
-
-        elif cmd == "4":
-            name = input("Enter knowledge/fact: ").strip()
-            if not name: continue
-            attrs = input_attributes(state.settings.knowledge_attributes)
-            state.save_entity(Knowledge(name=name, attributes=attrs))
+            
+            mapping = {"Place": state.settings.place_attributes, 
+                       "Item": state.settings.item_attributes, 
+                       "Knowledge": state.settings.knowledge_attributes}
+            attrs = input_attributes(mapping[etype])
+            state.create_entity(name, etype, DefaultImportance.EXTRA.value, attrs)
 
         elif cmd == "5":
             entities = list_all_entities(state)
@@ -180,19 +177,12 @@ def run_cli():
                 print(f"{src_name} --({r.rel_type.value}: {r.description})--> {dst_name}")
 
         elif cmd == "7":
-            new_name = get_next_canvas_name(canvas_name.split('_')[0])
-            new_path = os.path.join(SAVES_DIR, new_name)
-            shutil.copytree(state.path, new_path)
-            print(f"Cloned current canvas to {new_name}")
-            state = CanvasState(new_name)
-            canvas_name = new_name
+            new_name = input("Enter name for new Save/Slot: ").strip()
+            if new_name:
+                if state.create_slot(new_name, clone_current=True):
+                    print(f"Created and switched to slot: {new_name}")
+                else:
+                    print("Slot already exists or failed to create.")
 
         elif cmd == "8":
-            confirm = input(f"Are you sure you want to DELETE {canvas_name}? (y/n): ").lower()
-            if confirm == 'y':
-                shutil.rmtree(state.path)
-                print("Canvas deleted.")
-                return 
-
-        elif cmd == "9":
             break

@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 from typing import Optional, Dict, List, Type, Any
 from nicegui import ui, events
 from .storage import CanvasState, get_available_canvases, SAVES_DIR
@@ -8,6 +9,8 @@ from .models import EntityIdentity, EntityState, Event, Relationship, DefaultImp
 class StoryCanvasGUI:
     def __init__(self):
         self.state: Optional[CanvasState] = None
+        self.active_entity: Optional[Dict[str, Any]] = None
+        self.canvas_container: Optional[ui.element] = None
         self._setup_styles()
         self.container = ui.element('div').classes('w-full h-full')
         self.importance_filter = {} 
@@ -48,6 +51,7 @@ class StoryCanvasGUI:
                     font-size: 0.85rem; padding: 8px;
                     user-select: none;
                     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+                    transition: transform 0.15s;
                 }
                 .entity-actor { border-left: 6px solid #ef4444; }
                 .entity-place { border-left: 6px solid #22c55e; }
@@ -79,27 +83,64 @@ class StoryCanvasGUI:
                 }
                 .slot-bubble.active { background-color: #3b82f6; transform: scale(1.4); }
             </style>
-            <script>
-                window.startDrag = (e, id, uid, isEvent) => {
-                    const el = document.getElementById(id);
-                    if (!el) return;
-                    const startX = e.clientX - el.offsetLeft;
-                    const startY = e.clientY - el.offsetTop;
-                    const move = (me) => {
-                        el.style.left = (me.clientX - startX) + 'px';
-                        el.style.top = (me.clientY - startY) + 'px';
-                    };
-                    const stop = () => {
-                        document.removeEventListener('mousemove', move);
-                        document.removeEventListener('mouseup', stop);
-                        emitEvent('update_pos', {uid: uid, x: parseInt(el.style.left), y: parseInt(el.style.top), isEvent: isEvent});
-                    };
-                    document.addEventListener('mousemove', move);
-                    document.addEventListener('mouseup', stop);
-                };
-            </script>
         ''')
-        ui.on('update_pos', lambda e: self._handle_pos_update(e.args))
+
+    def _handle_mousedown(self, e: events.MouseEventArguments, card, uid, is_event):
+        if is_event:
+            ev = next((ev for ev in self.state.events if ev.uid == uid), None)
+            start_x, start_y = ev.x, ev.y
+        else:
+            state = self.state.entity_states.get(uid)
+            start_x, start_y = state.x, state.y
+
+        # GenericEventArguments store JS properties in the 'args' dict
+        self.active_entity = {
+            'card': card,
+            'uid': uid,
+            'is_event': is_event,
+            'start_mouse_x': e.args['clientX'],
+            'start_mouse_y': e.args['clientY'],
+            'start_obj_x': start_x,
+            'start_obj_y': start_y,
+            'current_x': start_x,
+            'current_y': start_y
+        }
+        card.classes(add='z-50 shadow-2xl scale-105')
+
+    def _handle_mousemove(self, e: events.MouseEventArguments):
+        if not self.active_entity:
+            return
+        
+        dx = e.args['clientX'] - self.active_entity['start_mouse_x']
+        dy = e.args['clientY'] - self.active_entity['start_mouse_y']
+        
+        self.active_entity['current_x'] = self.active_entity['start_obj_x'] + dx
+        self.active_entity['current_y'] = self.active_entity['start_obj_y'] + dy
+        
+        self.active_entity['card'].style(
+            f"left: {self.active_entity['current_x']}px; "
+            f"top: {self.active_entity['current_y']}px; "
+            f"transition: none;"
+        )
+
+    def _handle_mouseup(self):
+        if not self.active_entity:
+            return
+            
+        data = {
+            'uid': self.active_entity['uid'],
+            'x': self.active_entity['current_x'],
+            'y': self.active_entity['current_y'],
+            'isEvent': self.active_entity['is_event']
+        }
+        
+        # Reset card visual state
+        self.active_entity['card'].classes(remove='z-50 shadow-2xl scale-105')
+        
+        # Persist the change
+        self._handle_pos_update(data)
+        
+        self.active_entity = None
 
     def _handle_pos_update(self, data):
         if not self.state: return
@@ -112,7 +153,7 @@ class StoryCanvasGUI:
                     break
         else:
             self.state.update_state(uid, float(x), float(y), self.state.entity_states[uid].attributes)
-        self._draw_relationships()
+        self._refresh_canvas_content()
 
     def build_selector(self):
         self.container.clear()
@@ -151,6 +192,10 @@ class StoryCanvasGUI:
                 ui.button(icon='home', on_click=self.build_selector).props('round flat color=slate-600')
 
             self.canvas_container = ui.element('div').classes('canvas-container')
+            self.canvas_container.on('mousemove', self._handle_mousemove)
+            self.canvas_container.on('mouseup', self._handle_mouseup)
+            self.canvas_container.on('mouseleave', self._handle_mouseup)
+            
             with self.canvas_container:
                 self._refresh_canvas_content()
             self._build_timeline_bar()
@@ -191,7 +236,7 @@ class StoryCanvasGUI:
                 with ui.context_menu():
                     ui.menu_item('Edit', on_click=lambda: self.edit_entity_dialog(identity, state))
                     ui.menu_item('Delete from Slot', on_click=lambda: self._delete_entity(identity.uid))
-            card.on('mousedown', f'(e) => window.startDrag(e, "{card.id}", "{identity.uid}", false)')
+            card.on('mousedown', lambda e: self._handle_mousedown(e, card, identity.uid, False))
 
     def _add_event_to_ui(self, ev: Event):
         with self.canvas_container:
@@ -203,7 +248,7 @@ class StoryCanvasGUI:
                 with ui.context_menu():
                     ui.menu_item('Edit Event', on_click=lambda: self.edit_event_dialog(ev))
                     ui.menu_item('Delete Event', on_click=lambda: self._delete_event(ev.uid))
-            card.on('mousedown', f'(e) => window.startDrag(e, "{card.id}", "{ev.uid}", true)')
+            card.on('mousedown', lambda e: self._handle_mousedown(e, card, ev.uid, True))
 
     def edit_entity_dialog(self, identity: EntityIdentity, state: EntityState):
         form = {
@@ -337,6 +382,46 @@ class StoryCanvasGUI:
             import json
             json.dump([e.model_dump() for e in self.state.events], f, indent=4)
         self._refresh_canvas_content()
+
+    def add_relationship_dialog(self):
+        if not self.state: return
+        entities = []
+        for uid, s in self.state.entity_states.items():
+            identity = self.state.registry.entities.get(uid)
+            if identity:
+                entities.append({'label': identity.name, 'value': uid})
+        
+        if len(entities) < 2:
+            ui.notify('Need at least 2 entities to create a relationship', type='warning')
+            return
+
+        form = {
+            'source': entities[0]['value'],
+            'target': entities[1]['value'],
+            'type': RelationshipType.SENTIMENT,
+            'desc': ''
+        }
+
+        with ui.dialog() as dialog, ui.card().classes('w-96'):
+            ui.label('Add Relationship').classes('text-h6')
+            ui.select(entities, label='Source').bind_value(form, 'source').classes('w-full')
+            ui.select(entities, label='Target').bind_value(form, 'target').classes('w-full')
+            ui.select([t.value for t in RelationshipType], label='Type').bind_value(form, 'type').classes('w-full')
+            ui.input('Description').bind_value(form, 'desc').classes('w-full')
+            
+            ui.button('Create', on_click=lambda: self._create_relationship(form, dialog)).classes('w-full')
+        dialog.open()
+
+    def _create_relationship(self, form, dialog):
+        rel = Relationship(
+            source_uid=form['source'],
+            target_uid=form['target'],
+            rel_type=form['type'],
+            description=form['desc']
+        )
+        self.state.save_relationship(rel)
+        self._refresh_canvas_content()
+        dialog.close()
 
     def edit_settings_dialog(self):
         with ui.dialog() as dialog, ui.card().classes('w-[500px]'):
