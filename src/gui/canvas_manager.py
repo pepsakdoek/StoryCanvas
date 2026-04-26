@@ -46,6 +46,14 @@ class CanvasManager:
         card.on('mousedown', lambda e: self.gui._handle_mousedown(e, card, ev.uid, True))
         card.on('dblclick', lambda: self.gui.dialogs.edit_event_dialog(ev))
 
+    def _get_intersection_offset(self, ux, uy, is_event):
+        if is_event: return 52 
+        w, h = 60, 40
+        if abs(ux) * h > abs(uy) * w:
+            return abs(w / ux) if ux != 0 else h
+        else:
+            return abs(h / uy) if uy != 0 else w
+
     def _draw_relationships(self):
         links = {}
         for rel in self.gui.state.relationships:
@@ -71,23 +79,43 @@ class CanvasManager:
                 dist = math.sqrt(dx*dx + dy*dy)
                 if dist < 20: continue
                 ux, uy = dx/dist, dy/dist
-                s_off, e_off = (55 if is_src_ev else 65), (55 if is_dst_ev else 65)
-                lx1, ly1, lx2, ly2 = x1 + ux * s_off, y1 + uy * s_off, x2 - ux * e_off, y2 - uy * e_off
-                ldist = math.sqrt((lx2-lx1)**2 + (ly2-ly1)**2)
-                angle = math.atan2(ly2-ly1, lx2-lx1) * 180 / math.pi
-                
+
                 pair = tuple(sorted([rel.source_uid, rel.target_uid]))
                 is_bidir = links[pair] > 1
-                off_val = 15 if is_bidir and rel.source_uid < rel.target_uid else -15 if is_bidir else 0
-
-                ui.element('div').classes('relationship-line').style(f'left: {lx1}px; top: {ly1}px; width: {ldist}px; transform: rotate({angle}deg)')
                 
+                # Perpendicular vector for bidirectional separation
+                # We use source order to ensure they push in opposite directions
+                # A->B gets +20, B->A gets -20 relative to its own vector
+                # But since the vector for B->A is already negative of A->B,
+                # just using a fixed offset relative to its OWN vector works naturally.
+                off_mag = 20 if is_bidir else 0
+                px, py = -uy * off_mag, ux * off_mag
+                
+                # Dynamic edge detection
+                s_off = self._get_intersection_offset(ux, uy, is_src_ev) + 2
+                e_off = self._get_intersection_offset(-ux, -uy, is_dst_ev) + 2
+                
+                lx1, ly1 = x1 + ux * s_off + px/2, y1 + uy * s_off + py/2
+                lx2, ly2 = x2 - ux * e_off + px/2, y2 - uy * e_off + py/2
+                
+                ldx, ldy = lx2 - lx1, ly2 - ly1
+                ldist = math.sqrt(ldx**2 + ldy**2)
+                angle = math.atan2(ldy, ldx) * 180 / math.pi
+                
+                # Draw the line
+                ui.element('div').classes('relationship-line').style(
+                    f'left: {lx1}px; top: {ly1}px; width: {ldist}px; transform: rotate({angle}deg)'
+                )
+                
+                # Label at midpoint + perpendicular offset
                 mid_x, mid_y = (lx1 + lx2) / 2, (ly1 + ly2) / 2
-                px, py = -uy * off_val, ux * off_val
-                label = ui.element('div').classes('relationship-label').style(f'left: {mid_x + px}px; top: {mid_y + py}px')
-                with label:
+                # Additional label offset to clear the line
+                label_x, label_y = mid_x + px/1.5, mid_y + py/1.5
+                
+                label_cont = ui.element('div').classes('relationship-label').style(f'left: {label_x}px; top: {label_y}px')
+                with label_cont:
                     ui.label(rel.description)
                     with ui.context_menu():
                         ui.menu_item('Edit Link', on_click=lambda r=rel: self.gui.dialogs.edit_relationship_dialog(r))
                         ui.menu_item('Delete Link', on_click=lambda r=rel: self.gui._delete_relationship(r.uid))
-                label.on('dblclick', lambda r=rel: self.gui.dialogs.edit_relationship_dialog(r))
+                label_cont.on('dblclick', lambda r=rel: self.gui.dialogs.edit_relationship_dialog(r))

@@ -123,11 +123,12 @@ class DialogManager:
                     ui.input(t.name, value=val, on_change=lambda e, n=t.name: form['attributes'].update({n: e.value})).props('dense outlined')
 
     def add_slot_dialog(self):
+        default_name = f"Chapter {len(self.gui.state.get_slots())+1}"
         with ui.dialog() as dialog, ui.card():
             ui.label('New Chapter').classes('text-h6')
-            name = ui.input('Name', placeholder=f"Chapter {len(self.gui.state.get_slots())+1}")
+            name = ui.input('Name', placeholder=default_name)
             clone = ui.checkbox('Clone state', value=True)
-            ui.button('Create', on_click=lambda: self._create_slot(name.value or name.placeholder, clone.value, dialog))
+            ui.button('Create', on_click=lambda: self._create_slot(name.value or default_name, clone.value, dialog))
         dialog.open()
 
     def _create_slot(self, name, clone, dialog):

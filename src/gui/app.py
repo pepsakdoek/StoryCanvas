@@ -107,6 +107,10 @@ class StoryCanvasGUI:
 
     # Drag & Drop Handlers
     def _handle_mousedown(self, e: events.MouseEventArguments, card, uid, is_event):
+        # Ignore right-clicks (button 2) to allow context menu without starting a drag/refresh
+        if e.args.get('button') == 2:
+            return
+
         if is_event:
             ev = next((ev for ev in self.state.events if ev.uid == uid), None)
             sx, sy = ev.x, ev.y
