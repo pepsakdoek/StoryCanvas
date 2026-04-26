@@ -1,6 +1,7 @@
 import os
 import shutil
 import uuid
+import math
 from typing import Optional, Dict, List, Type, Any
 from nicegui import ui, events
 from .storage import CanvasState, get_available_canvases, SAVES_DIR
@@ -51,7 +52,11 @@ class StoryCanvasGUI:
                     font-size: 0.85rem; padding: 8px;
                     user-select: none;
                     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-                    transition: transform 0.15s;
+                    transition: transform 0.15s, box-shadow 0.15s;
+                }
+                .entity-block:hover {
+                    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+                    transform: translateY(-2px);
                 }
                 .entity-actor { border-left: 6px solid #ef4444; }
                 .entity-place { border-left: 6px solid #22c55e; }
@@ -64,8 +69,33 @@ class StoryCanvasGUI:
                     background-color: #94a3b8;
                     transform-origin: top left;
                     pointer-events: none; z-index: 5;
-                    opacity: 0.4;
+                    opacity: 0.6;
                 }
+                /* Arrowhead for the line */
+                .relationship-line::after {
+                    content: '';
+                    position: absolute;
+                    right: 0;
+                    top: -4px;
+                    border-top: 5px solid transparent;
+                    border-bottom: 5px solid transparent;
+                    border-left: 8px solid #94a3b8;
+                }
+                .relationship-label {
+                    position: absolute;
+                    font-size: 10px;
+                    font-weight: bold;
+                    background-color: rgba(255, 255, 255, 0.9);
+                    padding: 2px 6px;
+                    border-radius: 10px;
+                    border: 1px solid #cbd5e1;
+                    color: #475569;
+                    pointer-events: none;
+                    z-index: 6;
+                    white-space: nowrap;
+                    transform: translate(-50%, -50%);
+                }
+                
                 .timeline-bar {
                     position: absolute; bottom: 20px; left: 50%;
                     transform: translateX(-50%); z-index: 100;
@@ -237,6 +267,7 @@ class StoryCanvasGUI:
                     ui.menu_item('Edit', on_click=lambda: self.edit_entity_dialog(identity, state))
                     ui.menu_item('Delete from Slot', on_click=lambda: self._delete_entity(identity.uid))
             card.on('mousedown', lambda e: self._handle_mousedown(e, card, identity.uid, False))
+            card.on('dblclick', lambda: self.edit_entity_dialog(identity, state))
 
     def _add_event_to_ui(self, ev: Event):
         with self.canvas_container:
@@ -249,6 +280,7 @@ class StoryCanvasGUI:
                     ui.menu_item('Edit Event', on_click=lambda: self.edit_event_dialog(ev))
                     ui.menu_item('Delete Event', on_click=lambda: self._delete_event(ev.uid))
             card.on('mousedown', lambda e: self._handle_mousedown(e, card, ev.uid, True))
+            card.on('dblclick', lambda: self.edit_event_dialog(ev))
 
     def edit_entity_dialog(self, identity: EntityIdentity, state: EntityState):
         form = {
@@ -359,18 +391,30 @@ class StoryCanvasGUI:
             dialog.close(); self.build_canvas()
 
     def _draw_relationships(self):
-        uid_map = {uid: self.state.registry.entities[uid] for uid in self.state.entity_states}
         for rel in self.state.relationships:
             src_state = self.state.entity_states.get(rel.source_uid)
             dst_state = self.state.entity_states.get(rel.target_uid)
             if src_state and dst_state:
+                # Center point of source card (120x80)
                 x1, y1 = src_state.x + 60, src_state.y + 40
+                # Center point of target card
                 x2, y2 = dst_state.x + 60, dst_state.y + 40
-                import math
+                
                 dx, dy = x2 - x1, y2 - y1
                 dist = math.sqrt(dx*dx + dy*dy)
+                if dist == 0: continue
+                
                 angle = math.atan2(dy, dx) * 180 / math.pi
-                ui.element('div').classes('relationship-line').style(f'left: {x1}px; top: {y1}px; width: {dist}px; transform: rotate({angle}deg)').tooltip(rel.description)
+                
+                # Draw the line
+                ui.element('div').classes('relationship-line').style(
+                    f'left: {x1}px; top: {y1}px; width: {dist}px; transform: rotate({angle}deg)'
+                )
+                
+                # Draw the description label at the midpoint
+                mid_x, mid_y = (x1 + x2) / 2, (y1 + y2) / 2
+                with ui.element('div').classes('relationship-label').style(f'left: {mid_x}px; top: {mid_y}px'):
+                    ui.label(rel.description)
 
     def _delete_entity(self, uid):
         self.state.delete_entity(uid); self._refresh_canvas_content()
