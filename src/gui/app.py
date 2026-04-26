@@ -64,6 +64,7 @@ class StoryCanvasGUI:
                     ui.button(icon='menu_book', on_click=lambda: self.dialogs.add_entity_dialog("Knowledge")).props('round unelevated dense color=purple-5')
                     ui.button(icon='bolt', on_click=self.dialogs.add_event_dialog).props('round unelevated dense color=slate-600')
                     ui.button(icon='link', on_click=self.dialogs.add_relationship_dialog).props('round unelevated dense color=blue-5')
+                    ui.button(icon='auto_awesome', on_click=self._auto_arrange).props('round unelevated dense color=amber-5').tooltip("Auto-Arrange")
 
                 with ui.row().classes('items-center gap-2'):
                     ui.label('Chapters:').classes('text-[10px] font-bold text-slate-400 uppercase tracking-wider')
@@ -105,6 +106,12 @@ class StoryCanvasGUI:
     def _delete_relationship(self, uid):
         self.state.relationships = [r for r in self.state.relationships if r.uid != uid]
         self.state.save_relationships(); self._refresh_canvas_content()
+
+    def _auto_arrange(self):
+        if self.state:
+            self.state.auto_arrange()
+            self._refresh_canvas_content()
+            ui.notify("Canvas auto-arranged!")
 
     # Drag & Drop Handlers
     def _handle_mousedown(self, e: events.MouseEventArguments, card, uid, is_event):

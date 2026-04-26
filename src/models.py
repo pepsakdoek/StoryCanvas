@@ -65,6 +65,8 @@ class RelationshipType(str, Enum):
     CAUSALITY = "causality"
     SENTIMENT = "sentiment"
     CHRONOTOPE = "chronotope"
+    POSSESSION = "possession" # For items held by actors
+    LOCATION = "location"     # For entities located in places
 
 class Relationship(BaseModel):
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()))

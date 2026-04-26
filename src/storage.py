@@ -87,8 +87,68 @@ class CanvasState:
         # Initial State
         state = EntityState(uid=uid, attributes=attributes)
         self.entity_states[uid] = state
+        
+        # Automatically arrange after creation
+        self.auto_arrange()
         self.save_states()
         return uid
+
+    def auto_arrange(self):
+        """Deterministically arranges entities on the canvas based on type and relationships."""
+        sorted_uids = sorted(self.registry.entities.keys())
+        
+        # 1. Arrange Places in a grid (Mental Map)
+        places = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Place"]
+        place_coords = {}
+        for i, uid in enumerate(places):
+            col, row = i % 3, i // 3
+            x, y = 300 + col * 250, 300 + row * 200
+            place_coords[uid] = (x, y)
+            if uid in self.entity_states:
+                self.entity_states[uid].x, self.entity_states[uid].y = x, y
+
+        # 2. Arrange Actors at the top
+        actors = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Actor"]
+        # Sort actors by importance (main first) then by ID
+        actors.sort(key=lambda u: (self.registry.entities[u].importance, u))
+        for i, uid in enumerate(actors):
+            col, row = i % 6, i // 6
+            x, y = 100 + col * 150, 50 + row * 120
+            if uid in self.entity_states:
+                self.entity_states[uid].x, self.entity_states[uid].y = x, y
+
+        # 3. Arrange Items near owners or locations
+        items = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Item"]
+        for uid in items:
+            # Find owner (possession) or location
+            anchor_x, anchor_y = 800, 100 # Default fallback
+            
+            # Priority: 1. Owned by Actor, 2. Located in Place
+            related_actor = next((r.source_uid for r in self.relationships 
+                                 if r.target_uid == uid and r.rel_type == RelationshipType.POSSESSION), None)
+            if not related_actor:
+                related_actor = next((r.target_uid for r in self.relationships 
+                                     if r.source_uid == uid and r.rel_type == RelationshipType.POSSESSION), None)
+            
+            anchor_uid = related_actor
+            if not anchor_uid:
+                anchor_uid = next((r.target_uid for r in self.relationships 
+                                  if r.source_uid == uid and r.rel_type == RelationshipType.LOCATION), None)
+
+            if anchor_uid and anchor_uid in self.entity_states:
+                anchor_x = self.entity_states[anchor_uid].x
+                anchor_y = self.entity_states[anchor_uid].y + 85 # Position just below
+            
+            if uid in self.entity_states:
+                self.entity_states[uid].x, self.entity_states[uid].y = anchor_x, anchor_y
+
+        # 4. Knowledge (Scatter on the right)
+        knowledge = [uid for uid in sorted_uids if self.registry.entities[uid].entity_type == "Knowledge"]
+        for i, uid in enumerate(knowledge):
+            col, row = i % 2, i // 2
+            x, y = 1000 + col * 150, 50 + row * 120
+            if uid in self.entity_states:
+                self.entity_states[uid].x, self.entity_states[uid].y = x, y
 
     def update_identity(self, uid: str, name: str, importance: str):
         if uid in self.registry.entities:
