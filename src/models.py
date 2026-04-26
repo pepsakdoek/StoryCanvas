@@ -32,6 +32,8 @@ class CanvasSettings(BaseModel):
     place_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Atmosphere")]
     item_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Condition")]
     knowledge_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Source")]
+    snap_to_grid: bool = False
+    grid_size: int = 20
 
 # --- Global Identity ---
 class EntityIdentity(BaseModel):

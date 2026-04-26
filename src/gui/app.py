@@ -15,6 +15,12 @@ class StoryCanvasGUI:
         self.active_entity: Optional[Dict[str, Any]] = None
         self.canvas_container: Optional[ui.element] = None
         
+        # Panning state
+        self.is_panning_mode = False
+        self.is_panning = False
+        self.pan_offset = {'x': 0, 'y': 0}
+        self.last_mouse = {'x': 0, 'y': 0}
+        
         # Managers
         self.dialogs = DialogManager(self)
         self.canvas = CanvasManager(self)
@@ -94,11 +100,31 @@ class StoryCanvasGUI:
                     ui.button(icon='settings', on_click=self.dialogs.edit_settings_dialog).props('round flat color=slate-400')
 
             self.canvas_container = ui.element('div').classes('canvas-container')
+            self.canvas_container.on('mousedown', self._handle_canvas_mousedown)
             self.canvas_container.on('mousemove', self._handle_mousemove)
             self.canvas_container.on('mouseup', self._handle_mouseup)
             self.canvas_container.on('mouseleave', self._handle_mouseup)
+            
+            # Key listeners for panning
+            ui.keyboard_listener(on_key=self._handle_key)
+
             with self.canvas_container:
                 self.canvas.refresh_canvas_content()
+
+    def _handle_key(self, e: events.KeyEventArguments):
+        if e.key == ' ':
+            self.is_panning_mode = e.action.keydown
+            if self.is_panning_mode:
+                self.canvas_container.classes(add='cursor-grab')
+            else:
+                self.canvas_container.classes(remove='cursor-grab cursor-grabbing')
+                self.is_panning = False
+
+    def _handle_canvas_mousedown(self, e: events.MouseEventArguments):
+        if self.is_panning_mode:
+            self.is_panning = True
+            self.last_mouse = {'x': e.args['clientX'], 'y': e.args['clientY']}
+            self.canvas_container.classes(add='cursor-grabbing')
 
     def _toggle_type_filter(self, etype, value):
         self.type_filter[etype] = value; self._refresh_canvas_content()

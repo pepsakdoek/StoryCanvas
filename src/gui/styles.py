@@ -8,6 +8,13 @@ STYLE_DEFINITION = '''
         background-color: #f0f4f8;
         position: relative; overflow: hidden;
     }
+    .canvas-content {
+        position: absolute; top: 0; left: 0;
+        width: 100%; height: 100%;
+        transform-origin: 0 0;
+    }
+    .cursor-grab { cursor: grab !important; }
+    .cursor-grabbing { cursor: grabbing !important; }
     .grid-overlay {
         position: absolute; top: 0; left: 0;
         width: 10000px; height: 10000px;

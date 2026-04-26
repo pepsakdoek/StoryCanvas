@@ -140,10 +140,18 @@ class DialogManager:
             with ui.tabs() as tabs: ui.tab('General'); ui.tab('Actors'); ui.tab('Places')
             with ui.tab_panels(tabs, value='General').classes('w-full'):
                 with ui.tab_panel('General'):
+                    ui.label('Importance Levels').classes('text-caption font-bold text-slate-500 mb-2')
                     for i, level in enumerate(self.gui.state.settings.importance_levels):
                         with ui.row().classes('w-full items-center'):
                             ui.input(value=level, on_change=lambda e, idx=i: self._update_imp_name(idx, e.value)).props('dense outlined').classes('flex-grow')
-                    ui.button('Add Level', on_click=lambda: self._add_imp_level(dialog)).props('flat icon=add')
+                    ui.button('Add Level', on_click=lambda: self._add_imp_level(dialog)).props('flat icon=add').classes('mb-4')
+                    
+                    ui.separator().classes('my-4')
+                    ui.label('Grid Settings').classes('text-caption font-bold text-slate-500 mb-2')
+                    ui.checkbox('Snap to Grid', value=self.gui.state.settings.snap_to_grid, 
+                                on_change=lambda e: setattr(self.gui.state.settings, 'snap_to_grid', e.value))
+                    ui.number('Grid Size', value=self.gui.state.settings.grid_size, suffix='px',
+                              on_change=lambda e: setattr(self.gui.state.settings, 'grid_size', int(e.value)))
             ui.button('Save', on_click=lambda: self._save_settings(dialog))
         dialog.open()
 
