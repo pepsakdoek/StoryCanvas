@@ -30,7 +30,8 @@ class StoryCanvasGUI:
         self.container.clear()
         with self.container:
             with ui.card().classes('absolute-center w-96 p-8 shadow-2xl'):
-                ui.label('StoryCanvas').classes('text-h4 mb-2 text-center w-full font-bold text-blue-600')
+                ui.label('Story Canvas').classes('text-h4 mb-2 text-center w-full font-bold text-blue-600')
+                ui.label('Story creation and narrative visualisation assistance').classes('text-h5 mb-2 text-center w-full font-bold text-blue-700')
                 canvases = get_available_canvases()
                 with ui.column().classes('w-full gap-3'):
                     for name in canvases:
