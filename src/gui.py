@@ -385,19 +385,18 @@ class StoryCanvasGUI:
 
     def add_relationship_dialog(self):
         if not self.state: return
-        entities = []
-        for uid, s in self.state.entity_states.items():
-            identity = self.state.registry.entities.get(uid)
-            if identity:
-                entities.append({'label': identity.name, 'value': uid})
+        entities = {uid: self.state.registry.entities[uid].name 
+                    for uid in self.state.entity_states 
+                    if uid in self.state.registry.entities}
         
         if len(entities) < 2:
             ui.notify('Need at least 2 entities to create a relationship', type='warning')
             return
 
+        uids = list(entities.keys())
         form = {
-            'source': entities[0]['value'],
-            'target': entities[1]['value'],
+            'source': uids[0],
+            'target': uids[1],
             'type': RelationshipType.SENTIMENT,
             'desc': ''
         }
