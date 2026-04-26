@@ -166,6 +166,9 @@ class CanvasState:
                 break
         else:
             self.relationships.append(rel)
+        self.save_relationships()
+
+    def save_relationships(self):
         with open(self.relationships_file, "w") as f:
             json.dump([r.model_dump() for r in self.relationships], f, indent=4)
 

@@ -37,7 +37,6 @@ def input_attributes(templates):
 def list_all_entities(state: CanvasState):
     entities = []
     # Collect all identities from registry that have state in current slot
-    # For CLI, let's just list everything in the registry that is active in this slot
     idx = 1
     print("\n--- Entities ---")
     
@@ -95,18 +94,23 @@ def run_cli():
     print(f"\nActive Canvas: {canvas_name}")
     
     while True:
-        print(f"\n--- {canvas_name} Menu ---")
+        print(f"\n--- {canvas_name} [{state.current_slot}] Menu ---")
         print("1. Add Actor")
         print("2. Add Place")
         print("3. Add Item")
         print("4. Add Knowledge")
         print("5. Add Relationship")
         print("6. List Everything")
-        print("7. Create New Version (Slot-based clone)")
-        print("8. Exit")
+        print("7. Create New Chapter")
+        print("8. Switch Chapter")
+        print("9. Delete Entity")
+        print("10. Delete Relationship")
+        print("11. Delete Chapter")
+        print("12. Exit")
         cmd = input("Select action: ").strip()
         
         if cmd == "1":
+            # ... (Existing logic)
             name = input("Enter actor name: ").strip()
             if not name: continue
             
@@ -177,12 +181,79 @@ def run_cli():
                 print(f"{src_name} --({r.rel_type.value}: {r.description})--> {dst_name}")
 
         elif cmd == "7":
-            new_name = input("Enter name for new Save/Slot: ").strip()
+            new_name = input("Enter name for new Chapter: ").strip()
             if new_name:
                 if state.create_slot(new_name, clone_current=True):
-                    print(f"Created and switched to slot: {new_name}")
+                    print(f"Created and switched to chapter: {new_name}")
                 else:
-                    print("Slot already exists or failed to create.")
+                    print("Chapter already exists or failed to create.")
 
         elif cmd == "8":
+            slots = state.get_slots()
+            print("\nAvailable Chapters:")
+            for i, s in enumerate(slots):
+                print(f"{i+1}. {s} {'(current)' if s == state.current_slot else ''}")
+            
+            choice = input("Select chapter (number): ").strip()
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(slots):
+                    state.switch_slot(slots[idx])
+                    print(f"Switched to chapter: {slots[idx]}")
+            except:
+                print("Invalid selection.")
+
+        elif cmd == "9":
+            entities = list_all_entities(state)
+            choice = input("Select entity to delete (number): ").strip()
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(entities):
+                    state.delete_entity(entities[idx].uid)
+                    print("Entity deleted.")
+            except:
+                print("Invalid selection.")
+
+        elif cmd == "10":
+            print("\n--- Relationships ---")
+            for i, r in enumerate(state.relationships):
+                print(f"{i+1}. {r.source_uid[:8]} -> {r.target_uid[:8]} ({r.description})")
+            
+            choice = input("Select relationship to delete (number): ").strip()
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(state.relationships):
+                    uid = state.relationships[idx].uid
+                    state.relationships = [r for r in state.relationships if r.uid != uid]
+                    state.save_relationships()
+                    print("Relationship deleted.")
+            except:
+                print("Invalid selection.")
+
+        elif cmd == "11":
+            slots = state.get_slots()
+            if len(slots) <= 1:
+                print("Cannot delete the only chapter.")
+                continue
+            
+            print("\nAvailable Chapters:")
+            for i, s in enumerate(slots):
+                print(f"{i+1}. {s}")
+            
+            choice = input("Select chapter to delete (number): ").strip()
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(slots):
+                    target = slots[idx]
+                    if target == state.current_slot:
+                        print("Cannot delete current chapter. Switch first.")
+                    else:
+                        confirm = input(f"Are you sure you want to delete '{target}'? (y/n): ").lower()
+                        if confirm == 'y':
+                            shutil.rmtree(os.path.join(state.slots_dir, target))
+                            print("Chapter deleted.")
+            except:
+                print("Invalid selection.")
+
+        elif cmd == "12":
             break
