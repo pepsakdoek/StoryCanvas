@@ -26,7 +26,7 @@ class StoryCanvasGUI:
         self.canvas = CanvasManager(self)
         
         setup_styles()
-        self.container = ui.element('div').classes('w-full h-full')
+        self.container = ui.element('div').classes('w-full h-full flex flex-col')
         
         # Filters
         self.importance_filter = {} 
@@ -74,18 +74,18 @@ class StoryCanvasGUI:
             # HEADER BAR
             with ui.element('div').classes('header-bar'):
                 with ui.row().classes('items-center gap-4'):
-                    ui.button(icon='home', on_click=self.build_selector).props('flat round color=slate-600')
+                    ui.button(icon='home', on_click=self.build_selector).props('flat round color=slate-600').tooltip("Home")
                     ui.separator().props('vertical')
                     for etype in ['Actor', 'Place', 'Item', 'Knowledge', 'Event']:
                         ui.checkbox(etype, value=self.type_filter.get(etype, True), 
                                    on_change=lambda e, t=etype: self._toggle_type_filter(t, e.value)).classes('text-xs')
                     ui.separator().props('vertical')
-                    ui.button(icon='person_add', on_click=lambda: self.dialogs.add_entity_dialog("Actor")).props('round unelevated dense color=red-5')
-                    ui.button(icon='add_location', on_click=lambda: self.dialogs.add_entity_dialog("Place")).props('round unelevated dense color=green-5')
-                    ui.button(icon='category', on_click=lambda: self.dialogs.add_entity_dialog("Item")).props('round unelevated dense color=yellow-7')
-                    ui.button(icon='menu_book', on_click=lambda: self.dialogs.add_entity_dialog("Knowledge")).props('round unelevated dense color=purple-5')
-                    ui.button(icon='bolt', on_click=self.dialogs.add_event_dialog).props('round unelevated dense color=slate-600')
-                    ui.button(icon='link', on_click=self.dialogs.add_relationship_dialog).props('round unelevated dense color=blue-5')
+                    ui.button(icon='person_add', on_click=lambda: self.dialogs.add_entity_dialog("Actor")).props('round unelevated dense color=red-5').tooltip("Add Actor")
+                    ui.button(icon='add_location', on_click=lambda: self.dialogs.add_entity_dialog("Place")).props('round unelevated dense color=green-5').tooltip("Add Place")
+                    ui.button(icon='category', on_click=lambda: self.dialogs.add_entity_dialog("Item")).props('round unelevated dense color=yellow-7').tooltip("Add Item")
+                    ui.button(icon='menu_book', on_click=lambda: self.dialogs.add_entity_dialog("Knowledge")).props('round unelevated dense color=purple-5').tooltip("Add Knowledge")
+                    ui.button(icon='bolt', on_click=self.dialogs.add_event_dialog).props('round unelevated dense color=slate-600').tooltip("Add Event")
+                    ui.button(icon='link', on_click=self.dialogs.add_relationship_dialog).props('round unelevated dense color=blue-5').tooltip("Add Relationship")
                     ui.button(icon='casino', on_click=self.dialogs.open_generator_dialog).props('round unelevated dense color=orange-5').tooltip("Random Generator")
                     ui.button(icon='auto_awesome', on_click=self._auto_arrange).props('round unelevated dense color=amber-5').tooltip("Auto-Arrange")
 
@@ -96,9 +96,9 @@ class StoryCanvasGUI:
                         with ui.element('div').classes('slot-bubble' + (' active' if active else '')) \
                             .on('click', lambda _, s=slot: self._switch_slot(s)).tooltip(slot):
                             ui.label(str(i+1))
-                    ui.button(icon='add', on_click=self.dialogs.add_slot_dialog).props('round flat dense color=blue')
+                    ui.button(icon='add', on_click=self.dialogs.add_slot_dialog).props('round flat dense color=blue').tooltip("Add Chapter")
                     ui.separator().props('vertical')
-                    ui.button(icon='settings', on_click=self.dialogs.edit_settings_dialog).props('round flat color=slate-400')
+                    ui.button(icon='settings', on_click=self.dialogs.edit_settings_dialog).props('round flat color=slate-400').tooltip("Canvas Settings")
 
             # Key listeners for panning (global)
             ui.keyboard(on_key=self._handle_key)
@@ -215,22 +215,58 @@ class StoryCanvasGUI:
 
     def _build_prose_panel(self):
         if not self.state: return
-        with ui.column().classes('w-full h-full p-4 gap-4'):
-            with ui.row().classes('w-full items-center gap-2'):
-                ui.label('Chapter Prose').classes('text-h6 font-bold')
-                self.prose_title = ui.input('Title', value=self.state.prose.title).classes('grow').on('change', self._save_prose)
+        with ui.column().classes('w-full h-full p-2 gap-2'):
+            with ui.row().classes('w-full items-center gap-2 border-b border-slate-200 pb-2'):
+                ui.icon('edit_note').classes('text-slate-400')
+                self.prose_title = ui.input(value=self.state.prose.title, placeholder='Chapter Title') \
+                    .classes('grow text-sm').props('dense borderless').on('change', self._save_prose)
+                with ui.row().classes('gap-1'):
+                    ui.button(icon='auto_awesome', on_click=self._prose_llm_action).props('flat dense round color=amber-7').tooltip('Extract Entities (LLM)')
+                    ui.button(icon='save', on_click=lambda: self._save_prose(notify=True)).props('flat dense round color=blue-5').tooltip('Save')
             
-            self.prose_editor = ui.textarea(value=self.state.prose.content).classes('w-full flex-1').on('change', self._save_prose)
-            self.prose_editor.props('outlined')
+            # Using ui.editor for a lightweight WYSIWYG experience
+            self.prose_editor = ui.editor(value=self.state.prose.content).classes('w-full flex-1 text-sm')
+            # Customizing the editor to be more compact
+            self.prose_editor.props('flat square dense toolbar-rounded toolbar-bg=blue-grey-1')
+            self.prose_editor.on('update:model-value', lambda e: self._save_prose(e))
             
-            ui.label('Markdown formatting supported').classes('text-xs text-slate-500')
+            with ui.row().classes('w-full justify-between items-center px-1'):
+                ui.label('WYSIWYG Editor').classes('text-[10px] text-slate-400 uppercase tracking-tighter')
+                ui.label(f'Chars: {len(self.state.prose.content)}').classes('text-[10px] text-slate-400').bind_text_from(self.prose_editor, 'value', backward=len)
 
-    def _save_prose(self):
+    async def _prose_llm_action(self):
+        if not self.state.prose.content or len(self.state.prose.content) < 10:
+            ui.notify("Prose is too short for analysis", type='warning')
+            return
+            
+        from ..generators import analyze_prose
+        ui.notify("Analyzing prose with LLM...", type='ongoing', spinner=True)
+        
+        # Use a background task or just await if it's fast enough (it's a request, so it might block if not careful)
+        # In NiceGUI, we can use run.io_bound for blocking calls
+        result = await app.run_task(lambda: analyze_prose(
+            self.state.prose.content,
+            self.state.app_settings.llm_endpoint,
+            self.state.app_settings.llm_model
+        ))
+        
+        if result:
+            with ui.dialog() as dialog, ui.card().classes('w-[600px]'):
+                ui.label('LLM Analysis & Entity Extraction').classes('text-h6 font-bold')
+                ui.markdown(result).classes('w-full max-h-96 overflow-y-auto p-4 bg-slate-50 rounded')
+                with ui.row().classes('w-full justify-end'):
+                    ui.button('Close', on_click=dialog.close).props('flat')
+            dialog.open()
+        else:
+            ui.notify("LLM analysis failed", type='negative')
+
+    def _save_prose(self, e=None, notify=False):
         if not self.state: return
         self.state.prose.title = self.prose_title.value
         self.state.prose.content = self.prose_editor.value
         self.state.save_prose(self.state.prose)
-        ui.notify("Prose saved!", type='positive', position='top')
+        if notify:
+            ui.notify("Prose saved!", type='positive', position='top')
 
 def run_gui():
     gui = StoryCanvasGUI()

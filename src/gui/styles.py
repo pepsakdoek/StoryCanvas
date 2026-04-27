@@ -4,7 +4,6 @@ STYLE_DEFINITION = '''
 <style>
     body { overflow: hidden; }
     .canvas-container {
-        width: 100vw; height: 100vh;
         background-color: #f0f4f8;
         position: relative; overflow: hidden;
     }

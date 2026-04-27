@@ -160,6 +160,25 @@ def get_expected_model(gen_type: str) -> type:
     }
     return mapping.get(gen_type, NameResponse)
 
+def analyze_prose(text: str, endpoint: str, model: str) -> Optional[str]:
+    """Send prose to LLM for analysis/entity extraction."""
+    prompt = (
+        f"Analyze the following story text and identify potential Actors, Places, Items, Knowledge, and Events. "
+        f"Return a summary of what you found.\n\nText: {text}"
+    )
+    try:
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False
+        }
+        response = requests.post(endpoint, json=payload, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("response", "").strip()
+    except Exception:
+        return None
+
 def generate_any(gen_type: str, endpoint: str, model: str, count: int = 1, custom_prompt: str = "", force_procedural: bool = False) -> Dict[str, Any]:
     """Unified generator function with LLM and procedural fallback."""
     if not force_procedural:
