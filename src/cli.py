@@ -21,7 +21,18 @@ def input_attributes(templates):
     for template in templates:
         if not template.enabled:
             continue
-        val = input(f"{template.name}: ").strip()
+        
+        label = f"{template.name}{' *' if template.required else ''}"
+        if template.attr_type == 'select':
+            print(f"{label} Options: {', '.join(template.options)}")
+        
+        val = input(f"{label}: ").strip()
+        
+        if not val and template.required:
+            print(f"Error: {template.name} is required. Please enter a value.")
+            while not val:
+                val = input(f"{label}: ").strip()
+        
         if val:
             attributes[template.name] = val
     
@@ -99,6 +110,7 @@ def run_cli():
         print("2. Add Place")
         print("3. Add Item")
         print("4. Add Knowledge")
+        print("e. Add Event")
         print("5. Add Relationship")
         print("6. List Everything")
         print("7. Create New Chapter")
@@ -111,37 +123,96 @@ def run_cli():
         print("14. Exit")
         cmd = input("Select action: ").strip()
         
-        if cmd == "1":
-            # ... (Existing logic)
-            name = input("Enter actor name: ").strip()
+        if cmd in ["1", "2", "3", "4"]:
+            etype_map = {"1": ("Actor", state.settings.actor_attributes),
+                         "2": ("Place", state.settings.place_attributes),
+                         "3": ("Item", state.settings.item_attributes),
+                         "4": ("Knowledge", state.settings.knowledge_attributes)}
+            etype, templates = etype_map[cmd]
+            
+            name = input(f"Enter {etype.lower()} name: ").strip()
             if not name: continue
             
-            print("\nImportance levels:")
+            importance = state.settings.importance_levels[-1]
+            if etype == "Actor":
+                print("\nImportance levels:")
+                for i, level in enumerate(state.settings.importance_levels):
+                    print(f"{i+1}. {level}")
+                
+                imp_choice = input(f"Select importance (1-{len(state.settings.importance_levels)}, default {len(state.settings.importance_levels)}): ").strip()
+                try:
+                    imp_idx = int(imp_choice) - 1
+                    if 0 <= imp_idx < len(state.settings.importance_levels):
+                        importance = state.settings.importance_levels[imp_idx]
+                except:
+                    pass
+            else:
+                # Other entities now also have importance
+                print(f"\nImportance levels (current default: {importance}):")
+                for i, level in enumerate(state.settings.importance_levels):
+                    print(f"{i+1}. {level}")
+                imp_choice = input(f"Select importance (1-{len(state.settings.importance_levels)}, leave empty for default): ").strip()
+                try:
+                    imp_idx = int(imp_choice) - 1
+                    if 0 <= imp_idx < len(state.settings.importance_levels):
+                        importance = state.settings.importance_levels[imp_idx]
+                except:
+                    pass
+            
+            attrs = input_attributes(templates)
+            state.create_entity(name, etype, importance, attrs)
+
+        elif cmd == "5":
+            entities = list_all_entities(state)
+            if len(entities) < 2:
+                print("Need at least 2 entities to create a relationship.")
+                continue
+            
+            try:
+                src_idx = int(input("\nSelect source entity (number): ")) - 1
+                dst_idx = int(input("Select target entity (number): ")) - 1
+                
+                print("\nRelationship Types: 1. agency, 2. causality, 3. sentiment, 4. chronotope")
+                rel_choice = input("Select type (1-4): ").strip()
+                rel_type = RelationshipType.SENTIMENT
+                if rel_choice == "1": rel_type = RelationshipType.AGENCY
+                elif rel_choice == "2": rel_type = RelationshipType.CAUSALITY
+                elif rel_choice == "4": rel_type = RelationshipType.CHRONOTOPE
+                
+                description = input("Enter description: ").strip()
+                
+                rel = Relationship(
+                    source_uid=entities[src_idx].uid,
+                    target_uid=entities[dst_idx].uid,
+                    rel_type=rel_type,
+                    description=description
+                )
+                state.save_relationship(rel)
+                print("Relationship added.")
+            except (ValueError, IndexError):
+                print("Invalid selection.")
+
+        elif cmd == "e":
+            name = input("Enter event name: ").strip()
+            if not name: continue
+            desc = input("Description: ").strip()
+
+            importance = state.settings.importance_levels[-1]
+            print(f"\nImportance levels (current default: {importance}):")
             for i, level in enumerate(state.settings.importance_levels):
                 print(f"{i+1}. {level}")
-            
-            imp_choice = input(f"Select importance (1-{len(state.settings.importance_levels)}, default {len(state.settings.importance_levels)}): ").strip()
-            importance = state.settings.importance_levels[-1]
+            imp_choice = input(f"Select importance (1-{len(state.settings.importance_levels)}, leave empty for default): ").strip()
             try:
                 imp_idx = int(imp_choice) - 1
                 if 0 <= imp_idx < len(state.settings.importance_levels):
                     importance = state.settings.importance_levels[imp_idx]
             except:
                 pass
-            
-            attrs = input_attributes(state.settings.actor_attributes)
-            state.create_entity(name, "Actor", importance, attrs)
-        
-        elif cmd in ["2", "3", "4"]:
-            etype = {"2": "Place", "3": "Item", "4": "Knowledge"}[cmd]
-            name = input(f"Enter {etype.lower()} name: ").strip()
-            if not name: continue
-            
-            mapping = {"Place": state.settings.place_attributes, 
-                       "Item": state.settings.item_attributes, 
-                       "Knowledge": state.settings.knowledge_attributes}
-            attrs = input_attributes(mapping[etype])
-            state.create_entity(name, etype, DefaultImportance.EXTRA.value, attrs)
+
+            attrs = input_attributes(state.settings.event_attributes)
+            ev = Event(name=name, description=desc, importance=importance, attributes=attrs)
+            state.save_event(ev)
+            print("Event added.")
 
         elif cmd == "5":
             entities = list_all_entities(state)
@@ -293,8 +364,8 @@ def _generator_cli(state: CanvasState):
             print(f"\nGenerating {gen_type}...")
             result = generate_any(
                 gen_type,
-                state.settings.llm_endpoint,
-                state.settings.llm_model,
+                state.app_settings.llm_endpoint,
+                state.app_settings.llm_model,
                 count=count,
                 custom_prompt=prompt,
                 force_procedural=force_proc
@@ -319,6 +390,8 @@ def _generator_cli(state: CanvasState):
                         ev = Event(
                             name=result['name'],
                             description=result['description'],
+                            importance=result.get('importance', 'extra'),
+                            attributes=result.get('attributes', {}),
                             involved_uids=result.get('involved_uids', []),
                             location_uid=result.get('location_uid'),
                             x=result.get('x', 500),

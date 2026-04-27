@@ -9,11 +9,24 @@ class DefaultImportance(str, Enum):
     TERTIARY = "tertiary"
     EXTRA = "extra"
 
+class AttributeType(str, Enum):
+    TEXT = "text"
+    NUMBER = "number"
+    SELECT = "select"
+
 class AttributeTemplate(BaseModel):
     name: str
     description: str = ""
+    attr_type: AttributeType = AttributeType.TEXT
+    options: List[str] = Field(default_factory=list) # For SELECT type
     required: bool = False
     enabled: bool = True
+
+class AppSettings(BaseModel):
+    llm_endpoint: str = "http://localhost:11434/api/generate"
+    llm_model: str = "phi:latest"
+    snap_to_grid: bool = False
+    grid_size: int = 20
 
 class CanvasSettings(BaseModel):
     importance_levels: List[str] = [
@@ -32,10 +45,7 @@ class CanvasSettings(BaseModel):
     place_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Atmosphere")]
     item_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Condition")]
     knowledge_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Source")]
-    snap_to_grid: bool = False
-    grid_size: int = 20
-    llm_endpoint: str = "http://localhost:11434/api/generate"
-    llm_model: str = "phi:latest"
+    event_attributes: List[AttributeTemplate] = []
 
 # --- Generator Response Models ---
 class NameResponse(BaseModel):
@@ -100,6 +110,8 @@ class Event(BaseModel):
     description: str = ""
     involved_uids: List[str] = Field(default_factory=list)
     location_uid: Optional[str] = None
+    importance: str = DefaultImportance.EXTRA.value
+    attributes: Dict[str, str] = Field(default_factory=dict)
     x: float = 500.0
     y: float = 500.0
 

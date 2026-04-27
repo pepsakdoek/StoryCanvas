@@ -197,6 +197,13 @@ class StoryCanvasGUI:
     def _handle_pos_update(self, data):
         if not self.state: return
         uid, x, y, is_ev = data['uid'], data['x'], data['y'], data.get('isEvent', False)
+        
+        # Apply Grid Snap
+        if self.state.app_settings.snap_to_grid:
+            gs = self.state.app_settings.grid_size
+            x = round(x / gs) * gs
+            y = round(y / gs) * gs
+
         if is_ev:
             for ev in self.state.events:
                 if ev.uid == uid:

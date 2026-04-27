@@ -2,16 +2,31 @@ import os
 import json
 import shutil
 from typing import List, Dict, Type, TypeVar, Any, Optional
-from .models import EntityIdentity, GlobalRegistry, EntityState, Event, Relationship, CanvasSettings, Prose
+from .models import EntityIdentity, GlobalRegistry, EntityState, Event, Relationship, CanvasSettings, Prose, AppSettings
 
 SAVES_DIR = "save"
 os.makedirs(SAVES_DIR, exist_ok=True)
+APP_SETTINGS_FILE = os.path.join(SAVES_DIR, "app_settings.json")
+
+def load_app_settings() -> AppSettings:
+    if os.path.exists(APP_SETTINGS_FILE):
+        with open(APP_SETTINGS_FILE, "r") as f:
+            try: return AppSettings(**json.load(f))
+            except: return AppSettings()
+    return AppSettings()
+
+def save_app_settings(settings: AppSettings):
+    with open(APP_SETTINGS_FILE, "w") as f:
+        json.dump(settings.model_dump(), f, indent=4)
 
 class CanvasState:
     def __init__(self, canvas_name: str, slot_name: str = "Chapter 1"):
         self.canvas_name = canvas_name
         self.canvas_path = os.path.join(SAVES_DIR, canvas_name)
         os.makedirs(self.canvas_path, exist_ok=True)
+        
+        # 0. Global App Settings
+        self.app_settings = load_app_settings()
         
         # 1. Root data (Global)
         self.settings_file = os.path.join(self.canvas_path, "settings.json")
