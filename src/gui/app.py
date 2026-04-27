@@ -86,6 +86,7 @@ class StoryCanvasGUI:
                     ui.button(icon='menu_book', on_click=lambda: self.dialogs.add_entity_dialog("Knowledge")).props('round unelevated dense color=purple-5')
                     ui.button(icon='bolt', on_click=self.dialogs.add_event_dialog).props('round unelevated dense color=slate-600')
                     ui.button(icon='link', on_click=self.dialogs.add_relationship_dialog).props('round unelevated dense color=blue-5')
+                    ui.button(icon='casino', on_click=self.dialogs.open_generator_dialog).props('round unelevated dense color=orange-5').tooltip("Random Generator")
                     ui.button(icon='auto_awesome', on_click=self._auto_arrange).props('round unelevated dense color=amber-5').tooltip("Auto-Arrange")
 
                 with ui.row().classes('items-center gap-2'):

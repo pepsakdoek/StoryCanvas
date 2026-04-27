@@ -34,6 +34,47 @@ class CanvasSettings(BaseModel):
     knowledge_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Source")]
     snap_to_grid: bool = False
     grid_size: int = 20
+    llm_endpoint: str = "http://localhost:11434/api/generate"
+    llm_model: str = "phi:latest"
+
+# --- Generator Response Models ---
+class NameResponse(BaseModel):
+    names: List[str]
+
+class TraitResponse(BaseModel):
+    traits: List[str]
+
+class CharacterResponse(BaseModel):
+    name: str
+    role: str
+    personality: str
+    traits: List[str]
+
+class PlaceResponse(BaseModel):
+    name: str
+    type: str
+    description: str
+    attributes: Dict[str, str]
+
+class ItemResponse(BaseModel):
+    name: str
+    type: str
+    description: str
+    attributes: Dict[str, str]
+
+class KnowledgeResponse(BaseModel):
+    name: str
+    type: str
+    description: str
+    attributes: Dict[str, str]
+
+class EventResponse(BaseModel):
+    name: str
+    description: str
+    involved_uids: List[str] = Field(default_factory=list)
+    location_uid: str = ""
+    x: int = 500
+    y: int = 500
 
 # --- Global Identity ---
 class EntityIdentity(BaseModel):

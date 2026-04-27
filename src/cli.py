@@ -107,7 +107,8 @@ def run_cli():
         print("10. Delete Relationship")
         print("11. Delete Chapter")
         print("12. View/Edit Prose")
-        print("13. Exit")
+        print("13. Random Generator")
+        print("14. Exit")
         cmd = input("Select action: ").strip()
         
         if cmd == "1":
@@ -260,7 +261,75 @@ def run_cli():
             _edit_prose_cli(state)
 
         elif cmd == "13":
+            _generator_cli(state)
+
+        elif cmd == "14":
             break
+
+def _generator_cli(state: CanvasState):
+    from .generators import generate_any
+    from .models import Event
+    import json
+
+    print("\n--- Random Generator ---")
+    types = ['Names', 'Traits', 'Character', 'Place', 'Item', 'Knowledge', 'Event']
+    for i, t in enumerate(types):
+        print(f"{i+1}. {t}")
+    
+    choice = input("\nSelect generator type (number): ").strip()
+    try:
+        t_idx = int(choice) - 1
+        if 0 <= t_idx < len(types):
+            gen_type = types[t_idx]
+            count = 1
+            if gen_type in ["Names", "Traits"]:
+                count_str = input("Count (default 1): ").strip()
+                if count_str: count = int(count_str)
+            
+            prompt = input("Custom prompt (optional): ").strip()
+            
+            force_proc = input("Force procedural? (y/n, default n): ").lower() == 'y'
+            
+            print(f"\nGenerating {gen_type}...")
+            result = generate_any(
+                gen_type,
+                state.settings.llm_endpoint,
+                state.settings.llm_model,
+                count=count,
+                custom_prompt=prompt,
+                force_procedural=force_proc
+            )
+            
+            if result:
+                print("\nGenerated Result:")
+                print(json.dumps(result, indent=2))
+                
+                save = input("\nSave to Canvas? (y/n): ").lower()
+                if save == 'y':
+                    if gen_type == "Names":
+                        for name in result.get('names', []):
+                            state.create_entity(name, "Actor", "extra", {})
+                    elif gen_type == "Character":
+                        state.create_entity(result['name'], "Actor", "secondary", 
+                                            {"Role": result['role'], "Personality": result['personality'], 
+                                             "Traits": ", ".join(result['traits'])})
+                    elif gen_type in ["Place", "Item", "Knowledge"]:
+                        state.create_entity(result['name'], gen_type, "extra", result.get('attributes', {}))
+                    elif gen_type == "Event":
+                        ev = Event(
+                            name=result['name'],
+                            description=result['description'],
+                            involved_uids=result.get('involved_uids', []),
+                            location_uid=result.get('location_uid'),
+                            x=result.get('x', 500),
+                            y=result.get('y', 500)
+                        )
+                        state.save_event(ev)
+                    print(f"Saved {gen_type} to canvas.")
+            else:
+                print("Generation failed.")
+    except Exception as e:
+        print(f"Error: {str(e)}")
 
 def _edit_prose_cli(state: CanvasState):
     print(f"\n--- Prose Editor [{state.current_slot}] ---")

@@ -19,6 +19,8 @@ A data-driven, emergent narrative game. The goal is to provide a "blank canvas" 
 - **Data Structures:** json files so that they are vaguely human readable and quickly parsable by cli and a programming language.
 - **Data Validation:** pydantic will make sure the json created by llms or other code is valid and can be inserted into the files.
 - **Intelligence:** Gemini API (cloud) and Ollama (local) for narrative generation and "Lucky" button flavors.
+    - **LLM Settings:** Managed via `CanvasSettings` (`llm_endpoint`, `llm_model`). Defaults to local Ollama (`http://localhost:11434/api/generate`).
+    - **Generator:** Integrated `src/generators.py` provides both LLM-powered and procedural fallback generation for Names, Traits, Characters, Places, Items, Knowledge, and Events.
 - **Interface:** Dual-mode (Web UI + CLI for agent-based testing).
 
 ## Development Notes

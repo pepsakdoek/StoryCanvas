@@ -137,7 +137,10 @@ class DialogManager:
     def edit_settings_dialog(self):
         with ui.dialog() as dialog, ui.card().classes('w-[500px]'):
             ui.label('Settings').classes('text-h6 mb-4')
-            with ui.tabs() as tabs: ui.tab('General'); ui.tab('Actors'); ui.tab('Places')
+            with ui.tabs() as tabs: 
+                ui.tab('General')
+                ui.tab('LLM')
+                ui.tab('Actors')
             with ui.tab_panels(tabs, value='General').classes('w-full'):
                 with ui.tab_panel('General'):
                     ui.label('Importance Levels').classes('text-caption font-bold text-slate-500 mb-2')
@@ -152,8 +155,103 @@ class DialogManager:
                                 on_change=lambda e: setattr(self.gui.state.settings, 'snap_to_grid', e.value))
                     ui.number('Grid Size', value=self.gui.state.settings.grid_size, suffix='px',
                               on_change=lambda e: setattr(self.gui.state.settings, 'grid_size', int(e.value)))
+                
+                with ui.tab_panel('LLM'):
+                    ui.label('Local LLM (Ollama)').classes('text-caption font-bold text-slate-500 mb-2')
+                    ui.input('Endpoint', value=self.gui.state.settings.llm_endpoint, 
+                             on_change=lambda e: setattr(self.gui.state.settings, 'llm_endpoint', e.value)).classes('w-full')
+                    ui.input('Model', value=self.gui.state.settings.llm_model, 
+                             on_change=lambda e: setattr(self.gui.state.settings, 'llm_model', e.value)).classes('w-full')
+
             ui.button('Save', on_click=lambda: self._save_settings(dialog))
         dialog.open()
+
+    def open_generator_dialog(self):
+        from ..generators import generate_any
+        
+        form = {
+            'type': 'Names',
+            'count': 1,
+            'prompt': '',
+            'result': None
+        }
+
+        with ui.dialog() as dialog, ui.card().classes('w-[500px] gap-4'):
+            ui.label('Random Generator').classes('text-h6 font-bold')
+            
+            with ui.row().classes('w-full gap-2 items-center'):
+                ui.select(['Names', 'Traits', 'Character', 'Place', 'Item', 'Knowledge', 'Event'], 
+                          label='Type').bind_value(form, 'type').classes('flex-grow')
+                ui.number('Count', value=1, min=1, max=10).bind_value(form, 'count').classes('w-20')
+            
+            ui.input('Custom Prompt (optional)').bind_value(form, 'prompt').classes('w-full')
+            
+            output_area = ui.label('Result will appear here...').classes(
+                'p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700 whitespace-pre-wrap w-full'
+            )
+
+            def run_gen(force_proc=False):
+                res = generate_any(
+                    form['type'], 
+                    self.gui.state.settings.llm_endpoint,
+                    self.gui.state.settings.llm_model,
+                    count=int(form['count']),
+                    custom_prompt=form['prompt'],
+                    force_procedural=force_proc
+                )
+                form['result'] = res
+                output_area.set_text(json.dumps(res, indent=2))
+                if not force_proc and res is None:
+                    ui.notify("LLM failed, try procedural?", type='warning')
+            
+            with ui.row().classes('w-full gap-2'):
+                ui.button('Generate', on_click=lambda: run_gen()).classes('flex-grow')
+                ui.button(icon='casino', on_click=lambda: run_gen(True)).props('flat').tooltip('Force Procedural')
+            
+            with ui.row().classes('w-full gap-2'):
+                ui.button('Save to Canvas', on_click=lambda: self._save_generated_to_canvas(form['type'], form['result'], dialog)) \
+                    .classes('flex-grow bg-green-600 text-white')
+                ui.button('Close', on_click=dialog.close).props('flat')
+
+        dialog.open()
+
+    def _save_generated_to_canvas(self, gen_type, result, dialog):
+        if not result:
+            ui.notify("Nothing to save!", type='warning')
+            return
+        
+        try:
+            if gen_type == "Names":
+                for name in result.get('names', []):
+                    self.gui.state.create_entity(name, "Actor", "extra", {})
+            elif gen_type == "Traits":
+                ui.notify("Trait generation saved to clipboard (not yet auto-assigned)", type='info')
+            elif gen_type == "Character":
+                self.gui.state.create_entity(result['name'], "Actor", "secondary", 
+                                             {"Role": result['role'], "Personality": result['personality'], 
+                                              "Traits": ", ".join(result['traits'])})
+            elif gen_type == "Place":
+                self.gui.state.create_entity(result['name'], "Place", "extra", result.get('attributes', {}))
+            elif gen_type == "Item":
+                self.gui.state.create_entity(result['name'], "Item", "extra", result.get('attributes', {}))
+            elif gen_type == "Knowledge":
+                self.gui.state.create_entity(result['name'], "Knowledge", "extra", result.get('attributes', {}))
+            elif gen_type == "Event":
+                ev = Event(
+                    name=result['name'],
+                    description=result['description'],
+                    involved_uids=result.get('involved_uids', []),
+                    location_uid=result.get('location_uid'),
+                    x=result.get('x', 500),
+                    y=result.get('y', 500)
+                )
+                self.gui.state.save_event(ev)
+            
+            self.gui._refresh_canvas_content()
+            ui.notify(f"Saved {gen_type} to canvas!")
+            dialog.close()
+        except Exception as e:
+            ui.notify(f"Error saving: {str(e)}", type='negative')
 
     def _update_imp_name(self, idx, val): self.gui.state.settings.importance_levels[idx] = val
     def _add_imp_level(self, dialog): self.gui.state.settings.importance_levels.append("new level"); dialog.close(); self.edit_settings_dialog()
