@@ -6,7 +6,7 @@ from nicegui import app, ui, events
 from ..storage import CanvasState, get_available_canvases, SAVES_DIR
 from ..models import EntityIdentity, EntityState, Event, Relationship, DefaultImportance, RelationshipType, AttributeTemplate, CanvasSettings
 from .styles import setup_styles
-from .dialogs import DialogManager
+from .dialog_manager import DialogManager
 from .canvas_manager import CanvasManager
 
 class StoryCanvasGUI:
