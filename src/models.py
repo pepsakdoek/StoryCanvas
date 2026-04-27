@@ -77,3 +77,9 @@ class Relationship(BaseModel):
     rel_type: RelationshipType
     description: str
     attributes: Dict[str, str] = Field(default_factory=dict)
+
+# --- Prose ---
+class Prose(BaseModel):
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str = ""
+    content: str = ""

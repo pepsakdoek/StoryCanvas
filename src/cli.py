@@ -106,7 +106,8 @@ def run_cli():
         print("9. Delete Entity")
         print("10. Delete Relationship")
         print("11. Delete Chapter")
-        print("12. Exit")
+        print("12. View/Edit Prose")
+        print("13. Exit")
         cmd = input("Select action: ").strip()
         
         if cmd == "1":
@@ -256,4 +257,60 @@ def run_cli():
                 print("Invalid selection.")
 
         elif cmd == "12":
+            _edit_prose_cli(state)
+
+        elif cmd == "13":
+            break
+
+def _edit_prose_cli(state: CanvasState):
+    print(f"\n--- Prose Editor [{state.current_slot}] ---")
+    print(f"Title: {state.prose.title}")
+    print("\nCurrent Content:")
+    if state.prose.content:
+        print(state.prose.content)
+    else:
+        print("(empty)")
+    
+    while True:
+        print("\nOptions:")
+        print("1. Edit Title")
+        print("2. Edit Content")
+        print("3. View Full Content")
+        print("4. Clear All")
+        print("5. Back")
+        choice = input("Select: ").strip()
+        
+        if choice == "1":
+            new_title = input("Enter new title: ").strip()
+            state.prose.title = new_title
+            state.save_prose(state.prose)
+            print(f"Title updated to: {new_title}")
+        
+        elif choice == "2":
+            print("Enter content (type END on a new line to finish):")
+            lines = []
+            while True:
+                line = input()
+                if line.strip() == "END":
+                    break
+                lines.append(line)
+            new_content = "\n".join(lines)
+            state.prose.content = new_content
+            state.save_prose(state.prose)
+            print("Content updated!")
+        
+        elif choice == "3":
+            print("\n--- Full Prose Content ---")
+            print(state.prose.content if state.prose.content else "(empty)")
+            print("--- End ---\n")
+        
+        elif choice == "4":
+            confirm = input("Clear all prose content? (y/n): ").lower()
+            if confirm == 'y':
+                state.prose.title = ""
+                state.prose.content = ""
+                state.save_prose(state.prose)
+                print("Prose cleared!")
+        
+        elif choice == "5":
             break

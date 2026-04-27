@@ -2,7 +2,7 @@ import os
 import json
 import shutil
 from typing import List, Dict, Type, TypeVar, Any, Optional
-from .models import EntityIdentity, GlobalRegistry, EntityState, Event, Relationship, CanvasSettings
+from .models import EntityIdentity, GlobalRegistry, EntityState, Event, Relationship, CanvasSettings, Prose
 
 SAVES_DIR = "save"
 os.makedirs(SAVES_DIR, exist_ok=True)
@@ -51,10 +51,12 @@ class CanvasState:
         self.states_file = os.path.join(self.slot_path, "States.json")
         self.events_file = os.path.join(self.slot_path, "Events.json")
         self.relationships_file = os.path.join(self.slot_path, "Relationships.json")
+        self.prose_file = os.path.join(self.slot_path, "Prose.json")
         
         self.entity_states: Dict[str, EntityState] = self._load_states()
         self.events: List[Event] = self._load_events()
         self.relationships: List[Relationship] = self._load_relationships()
+        self.prose: Prose = self._load_prose()
 
     def get_slots(self) -> List[str]:
         if not os.path.exists(self.slots_dir): return []
@@ -70,6 +72,10 @@ class CanvasState:
         if os.path.exists(new_path): return False
         if clone_current and os.path.exists(self.slot_path):
             shutil.copytree(self.slot_path, new_path)
+            # Reset prose for new chapter - don't duplicate previous prose
+            prose_file = os.path.join(new_path, "Prose.json")
+            if os.path.exists(prose_file):
+                os.remove(prose_file)
         else:
             os.makedirs(new_path, exist_ok=True)
         self.current_slot = name
@@ -229,6 +235,20 @@ class CanvasState:
     def save_relationships(self):
         with open(self.relationships_file, "w") as f:
             json.dump([r.model_dump() for r in self.relationships], f, indent=4)
+
+    def _load_prose(self) -> Prose:
+        if os.path.exists(self.prose_file):
+            with open(self.prose_file, "r") as f:
+                try: 
+                    data = json.load(f)
+                    return Prose(**data)
+                except: return Prose()
+        return Prose()
+
+    def save_prose(self, prose: Prose):
+        self.prose = prose
+        with open(self.prose_file, "w") as f:
+            json.dump(prose.model_dump(), f, indent=4)
 
     def delete_entity(self, uid: str):
         # We can remove state from current slot

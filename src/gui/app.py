@@ -99,17 +99,24 @@ class StoryCanvasGUI:
                     ui.separator().props('vertical')
                     ui.button(icon='settings', on_click=self.dialogs.edit_settings_dialog).props('round flat color=slate-400')
 
-            self.canvas_container = ui.element('div').classes('canvas-container')
-            self.canvas_container.on('mousedown', self._handle_canvas_mousedown)
-            self.canvas_container.on('mousemove', self._handle_mousemove)
-            self.canvas_container.on('mouseup', self._handle_mouseup)
-            self.canvas_container.on('mouseleave', self._handle_mouseup)
-            
-            # Key listeners for panning
-            ui.keyboard_listener(on_key=self._handle_key)
+            # Key listeners for panning (global)
+            ui.keyboard(on_key=self._handle_key)
 
-            with self.canvas_container:
-                self.canvas.refresh_canvas_content()
+            # Main content area: Canvas on left (75%) + Prose on right (25%)
+            with ui.row().classes('w-full flex-1 gap-0'):
+                # Canvas area (75%)
+                self.canvas_container = ui.element('div').classes('canvas-container w-3/4')
+                self.canvas_container.on('mousedown', self._handle_canvas_mousedown)
+                self.canvas_container.on('mousemove', self._handle_mousemove)
+                self.canvas_container.on('mouseup', self._handle_mouseup)
+                self.canvas_container.on('mouseleave', self._handle_mouseup)
+
+                with self.canvas_container:
+                    self.canvas.refresh_canvas_content()
+                
+                # Prose area (25%)
+                with ui.column().classes('w-1/4 h-full border-l border-slate-300 overflow-hidden'):
+                    self._build_prose_panel()
 
     def _handle_key(self, e: events.KeyEventArguments):
         if e.key == ' ':
@@ -197,6 +204,25 @@ class StoryCanvasGUI:
         else:
             self.state.update_state(uid, float(x), float(y), self.state.entity_states[uid].attributes)
         self._refresh_canvas_content()
+
+    def _build_prose_panel(self):
+        if not self.state: return
+        with ui.column().classes('w-full h-full p-4 gap-4'):
+            with ui.row().classes('w-full items-center gap-2'):
+                ui.label('Chapter Prose').classes('text-h6 font-bold')
+                self.prose_title = ui.input('Title', value=self.state.prose.title).classes('grow').on('change', self._save_prose)
+            
+            self.prose_editor = ui.textarea(value=self.state.prose.content).classes('w-full flex-1').on('change', self._save_prose)
+            self.prose_editor.props('outlined')
+            
+            ui.label('Markdown formatting supported').classes('text-xs text-slate-500')
+
+    def _save_prose(self):
+        if not self.state: return
+        self.state.prose.title = self.prose_title.value
+        self.state.prose.content = self.prose_editor.value
+        self.state.save_prose(self.state.prose)
+        ui.notify("Prose saved!", type='positive', position='top')
 
 def run_gui():
     gui = StoryCanvasGUI()
