@@ -40,7 +40,6 @@ class CanvasSettings(BaseModel):
         AttributeTemplate(name="Likes"),
         AttributeTemplate(name="Dislikes"),
         AttributeTemplate(name="Secret"),
-        AttributeTemplate(name="Weakness"),
     ]
     place_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Atmosphere")]
     item_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Condition")]

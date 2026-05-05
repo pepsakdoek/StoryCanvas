@@ -22,12 +22,13 @@ def fill_attr_container(gui, etype, container, form):
                 if t.attr_type == AttributeType.NUMBER:
                     ui.number(label, value=val, 
                               on_change=lambda e, n=t.name: form['attributes'].update({n: str(e.value)})
-                             ).props('dense outlined')
+                             ).props('dense outlined').classes('w-full').props(f'id=attr-number-{t.name}')
                 elif t.attr_type == AttributeType.SELECT:
+                    # Using w-full and ensuring the select component expands properly
                     ui.select(t.options, label=label, value=val, 
                               on_change=lambda e, n=t.name: form['attributes'].update({n: e.value})
-                             ).props('dense outlined').classes('w-full')
+                             ).props('dense outlined').classes('w-full').props(f'id=attr-select-{t.name}')
                 else: # TEXT
                     ui.input(label, value=val, 
                              on_change=lambda e, n=t.name: form['attributes'].update({n: e.value})
-                            ).props('dense outlined')
+                            ).props('dense outlined').classes('w-full').props(f'id=attr-input-{t.name}')
