@@ -48,3 +48,4 @@ The "Canvas" uses a hierarchical directory structure. This allows for persistent
 
 ## Narrative Logic
 The engine focuses on **Causality** over **Chronology**. Events are data packets that modify the state of the world, creating a "History Log" that turns random objects into storied artifacts.
+
