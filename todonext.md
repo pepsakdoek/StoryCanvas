@@ -1,8 +1,10 @@
 # Upcoming Tasks
 
-  [ ] Prose Editor Fixes:
-    [ ] First analuse if any of these issues are our fault and how many is the library. Do not try to fix things that are library issues.
-    [X] UI: The 'rich' edit options are hidden by the chapter toolbar. The hovering header bar is cool, but perhaps we should ditch it so elements can fit neatly.
-    [X] Bug: Fix Enter key adding newline but not moving the cursor
-    [X] Bug: Fix first character becoming last character when starting with a blank area (e.g., "Mary" -> "aryM") - this might be related to the proposed improvement below
-    [X] Improvement: Debounce or optimize auto-save to prevent cursor jumping during typing
+[ ] Test if prose is working in CLI
+[ ] Implement random LLM generation
+  [ ] Test local LLM, and cloud LLMs (I don't have API keys so not sure how I will test it - maybe I have some free tokens somewhere)
+  [ ] Random Actors, Places, Items, Knowledge, Events, Relationships
+    [ ] It should check the attributes for recommended / required fields for it to generate
+    [ ] Each field individually should also have a generate button (maybe in the settings we should have a setting to check if it should have the LLM generate button)
+
+
