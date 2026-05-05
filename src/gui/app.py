@@ -36,6 +36,10 @@ class StoryCanvasGUI:
         self.importance_filter = {} 
         self.type_filter = {'Actor': True, 'Place': True, 'Item': True, 'Knowledge': True, 'Event': True}
         self.active_attr_tab = 'Actors'
+        
+        # Prose saving debounce
+        self.prose_save_timer: Optional[ui.timer] = None
+        
         logging.info("StoryCanvasGUI initialized.")
 
     def build_selector(self):
@@ -260,15 +264,29 @@ class StoryCanvasGUI:
                     ui.button(icon='save', on_click=lambda: self._save_prose(notify=True)).props('flat dense round color=blue-5').tooltip('Save')
             
             # Using ui.editor for a lightweight WYSIWYG experience
-            # We use flex-1 and overflow-hidden/auto to ensure the editor stays within bounds and scrolls
             self.prose_editor = ui.editor(value=self.state.prose.content).classes('w-full flex-1 text-sm overflow-auto').props('id=prose-editor')
-            # Customizing the editor to be more compact
-            self.prose_editor.props('flat square dense toolbar-rounded toolbar-bg=blue-grey-1')
-            self.prose_editor.on('update:model-value', lambda e: self._save_prose(e))
+            # Customizing the editor:
+            # - paragraph-tag="p": ensures standard HTML paragraph behavior which often fixes Enter key issues
+            self.prose_editor.props('flat square dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p')
+            
+            # We use a custom event handler for debouncing
+            self.prose_editor.on_value_change(self._handle_prose_change)
             
             with ui.row().classes('w-full justify-between items-center px-1'):
                 ui.label('WYSIWYG Editor').classes('text-[10px] text-slate-400 uppercase tracking-tighter')
-                ui.label(f'Chars: {len(self.state.prose.content)}').classes('text-[10px] text-slate-400').bind_text_from(self.prose_editor, 'value', backward=len)
+                self.char_count_label = ui.label(f'Chars: {len(self.state.prose.content)}').classes('text-[10px] text-slate-400')
+
+    def _handle_prose_change(self, e):
+        # Update char count immediately for feedback
+        if hasattr(self, 'char_count_label'):
+            self.char_count_label.text = f'Chars: {len(e.value or "")}'
+        
+        # Debounce the disk save
+        if self.prose_save_timer:
+            self.prose_save_timer.cancel()
+        
+        # Save after 1 second of inactivity
+        self.prose_save_timer = ui.timer(1.0, self._save_prose, once=True)
 
     async def _prose_llm_action(self):
         if not self.state.prose.content or len(self.state.prose.content) < 10:
@@ -303,6 +321,7 @@ class StoryCanvasGUI:
         self.state.save_prose(self.state.prose)
         if notify:
             ui.notify("Prose saved!", type='positive', position='top')
+        self.prose_save_timer = None
 
 def run_gui():
     gui = StoryCanvasGUI()

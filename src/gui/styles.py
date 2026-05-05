@@ -90,15 +90,14 @@ STYLE_DEFINITION = '''
     }
     
     .header-bar {
-        position: absolute; top: 16px; left: 16px; right: 16px;
-        z-index: 50; height: 56px;
-        background-color: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(12px);
-        border-radius: 12px;
+        width: 100%; height: 56px;
+        background-color: #ffffff;
+        z-index: 50;
         padding: 0 16px;
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border-bottom: 1px solid #e2e8f0;
         display: flex; align-items: center; justify-content: space-between;
+        flex-shrink: 0;
     }
     .slot-bubble {
         width: 24px; height: 24px; border-radius: 6px;
