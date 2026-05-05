@@ -11,9 +11,12 @@ from .canvas_manager import CanvasManager
 
 class StoryCanvasGUI:
     def __init__(self):
+        import logging
+        logging.info("Initializing StoryCanvasGUI...")
         self.state: Optional[CanvasState] = None
         self.active_entity: Optional[Dict[str, Any]] = None
         self.canvas_container: Optional[ui.element] = None
+        self.canvas_content: Optional[ui.element] = None
         
         # Panning state
         self.is_panning_mode = False
@@ -26,11 +29,13 @@ class StoryCanvasGUI:
         self.canvas = CanvasManager(self)
         
         setup_styles()
-        self.container = ui.element('div').classes('w-full h-full flex flex-col')
+        # Force h-screen to ensure the root container fills the viewport
+        self.container = ui.element('div').classes('w-screen h-screen flex flex-col overflow-hidden').props('id=main-layout')
         
         # Filters
         self.importance_filter = {} 
         self.type_filter = {'Actor': True, 'Place': True, 'Item': True, 'Knowledge': True, 'Event': True}
+        logging.info("StoryCanvasGUI initialized.")
 
     def build_selector(self):
         self.container.clear()
@@ -69,6 +74,8 @@ class StoryCanvasGUI:
         self.build_canvas()
 
     def build_canvas(self):
+        import logging
+        logging.info(f"Building canvas for {self.state.canvas_name}...")
         self.container.clear()
         with self.container:
             # HEADER BAR
@@ -104,19 +111,27 @@ class StoryCanvasGUI:
             ui.keyboard(on_key=self._handle_key)
 
             # Main content area: Canvas on left (75%) + Prose on right (25%)
-            with ui.row().classes('w-full flex-1 gap-0'):
+            with ui.row().classes('w-full flex-1 gap-0 overflow-hidden').props('id=workspace-row'):
                 # Canvas area (75%)
-                self.canvas_container = ui.element('div').classes('canvas-container w-3/4')
+                self.canvas_container = ui.element('div').classes('canvas-container w-3/4 h-full relative').props('id=canvas-viewport')
                 self.canvas_container.on('mousedown', self._handle_canvas_mousedown)
                 self.canvas_container.on('mousemove', self._handle_mousemove)
                 self.canvas_container.on('mouseup', self._handle_mouseup)
                 self.canvas_container.on('mouseleave', self._handle_mouseup)
 
                 with self.canvas_container:
-                    self.canvas.refresh_canvas_content()
+                    # Debug Placeholder
+                    ui.label("CANVAS CONTAINER ACTIVE").classes('absolute-center text-slate-200 text-4xl pointer-events-none opacity-20 z-0')
+                    
+                    # Inner content that will be transformed for panning
+                    # We use absolute positioning for the content within the relative container
+                    self.canvas_content = ui.element('div').classes('canvas-content').props('id=canvas-surface')
+                    self._apply_pan()
+                    with self.canvas_content:
+                        self.canvas.refresh_canvas_content()
                 
                 # Prose area (25%)
-                with ui.column().classes('w-1/4 h-full border-l border-slate-300 overflow-hidden'):
+                with ui.column().classes('w-1/4 h-full border-l border-slate-300 overflow-hidden bg-white').props('id=prose-panel'):
                     self._build_prose_panel()
 
     def _handle_key(self, e: events.KeyEventArguments):
@@ -133,6 +148,10 @@ class StoryCanvasGUI:
             self.is_panning = True
             self.last_mouse = {'x': e.args['clientX'], 'y': e.args['clientY']}
             self.canvas_container.classes(add='cursor-grabbing')
+
+    def _apply_pan(self):
+        if hasattr(self, 'canvas_content') and self.canvas_content:
+            self.canvas_content.style(f"transform: translate({self.pan_offset['x']}px, {self.pan_offset['y']}px);")
 
     def _toggle_type_filter(self, etype, value):
         self.type_filter[etype] = value; self._refresh_canvas_content()
@@ -180,6 +199,15 @@ class StoryCanvasGUI:
         card.classes(add='z-50 shadow-2xl scale-105')
 
     def _handle_mousemove(self, e: events.MouseEventArguments):
+        if self.is_panning:
+            dx = e.args['clientX'] - self.last_mouse['x']
+            dy = e.args['clientY'] - self.last_mouse['y']
+            self.pan_offset['x'] += dx
+            self.pan_offset['y'] += dy
+            self.last_mouse = {'x': e.args['clientX'], 'y': e.args['clientY']}
+            self._apply_pan()
+            return
+
         if not self.active_entity: return
         dx = e.args['clientX'] - self.active_entity['smx']
         dy = e.args['clientY'] - self.active_entity['smy']
@@ -188,6 +216,12 @@ class StoryCanvasGUI:
         self.active_entity['card'].style(f"left: {self.active_entity['cx']}px; top: {self.active_entity['cy']}px; transition: none;")
 
     def _handle_mouseup(self):
+        if self.is_panning:
+            self.is_panning = False
+            if self.canvas_container:
+                self.canvas_container.classes(remove='cursor-grabbing')
+            return
+
         if not self.active_entity: return
         data = {'uid': self.active_entity['uid'], 'x': self.active_entity['cx'], 'y': self.active_entity['cy'], 'isEvent': self.active_entity['is_event']}
         self.active_entity['card'].classes(remove='z-50 shadow-2xl scale-105')
@@ -215,7 +249,7 @@ class StoryCanvasGUI:
 
     def _build_prose_panel(self):
         if not self.state: return
-        with ui.column().classes('w-full h-full p-2 gap-2'):
+        with ui.column().classes('w-full h-full p-2 gap-2 overflow-hidden').props('id=prose-inner-container'):
             with ui.row().classes('w-full items-center gap-2 border-b border-slate-200 pb-2'):
                 ui.icon('edit_note').classes('text-slate-400')
                 self.prose_title = ui.input(value=self.state.prose.title, placeholder='Chapter Title') \
@@ -225,7 +259,8 @@ class StoryCanvasGUI:
                     ui.button(icon='save', on_click=lambda: self._save_prose(notify=True)).props('flat dense round color=blue-5').tooltip('Save')
             
             # Using ui.editor for a lightweight WYSIWYG experience
-            self.prose_editor = ui.editor(value=self.state.prose.content).classes('w-full flex-1 text-sm')
+            # We use flex-1 and overflow-hidden/auto to ensure the editor stays within bounds and scrolls
+            self.prose_editor = ui.editor(value=self.state.prose.content).classes('w-full flex-1 text-sm overflow-auto').props('id=prose-editor')
             # Customizing the editor to be more compact
             self.prose_editor.props('flat square dense toolbar-rounded toolbar-bg=blue-grey-1')
             self.prose_editor.on('update:model-value', lambda e: self._save_prose(e))

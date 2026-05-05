@@ -24,7 +24,8 @@ def show_add_relationship_dialog(gui):
     dialog.open()
 
 def _create_relationship(gui, form, dialog):
-    rel = Relationship(source_uid=form['source'], target_uid=form['target'], rel_type=form['type'], description=form['desc'])
+    desc = form['desc'].strip()
+    rel = Relationship(source_uid=form['source'], target_uid=form['target'], rel_type=form['type'], description=desc)
     gui.state.save_relationship(rel)
     gui._refresh_canvas_content()
     dialog.close()
@@ -43,9 +44,10 @@ def show_edit_relationship_dialog(gui, rel: Relationship):
     dialog.open()
 
 def _update_relationship(gui, uid, form, dialog):
+    desc = form['desc'].strip()
     for r in gui.state.relationships:
         if r.uid == uid:
-            r.source_uid, r.target_uid, r.rel_type, r.description = form['source'], form['target'], form['type'], form['desc']
+            r.source_uid, r.target_uid, r.rel_type, r.description = form['source'], form['target'], form['type'], desc
             break
     gui.state.save_relationships()
     gui._refresh_canvas_content()

@@ -10,6 +10,7 @@ def show_add_slot_dialog(gui):
     dialog.open()
 
 def _create_slot(gui, name, clone, dialog):
+    name = name.strip()
     if gui.state.create_slot(name, clone): 
         dialog.close()
         gui.build_canvas()

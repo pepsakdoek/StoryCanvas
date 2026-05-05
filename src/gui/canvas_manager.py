@@ -7,21 +7,45 @@ class CanvasManager:
         self.gui = gui
 
     def refresh_canvas_content(self):
-        if not self.gui.canvas_container: return
-        self.gui.canvas_container.clear()
-        with self.gui.canvas_container:
+        import logging
+        if not hasattr(self.gui, 'canvas_content') or not self.gui.canvas_content:
+            logging.warning("refresh_canvas_content: canvas_content not found or None")
+            return
+            
+        logging.info(f"Refreshing canvas content. Current states: {len(self.gui.state.entity_states)}")
+        self.gui.canvas_content.clear()
+        with self.gui.canvas_content:
             ui.element('div').classes('grid-overlay')
             self._draw_relationships()
             
+            entities_rendered = 0
             for uid, state in self.gui.state.entity_states.items():
                 identity = self.gui.state.registry.entities.get(uid)
-                if not identity or not self.gui.type_filter.get(identity.entity_type, True): continue
-                if identity.entity_type == 'Actor' and not self.gui.importance_filter.get(identity.importance, True): continue
+                if not identity:
+                    logging.warning(f"Entity {uid} has state but no identity in registry!")
+                    continue
+                
+                type_ok = self.gui.type_filter.get(identity.entity_type, True)
+                imp_ok = True
+                if identity.entity_type == 'Actor':
+                    imp_ok = self.gui.importance_filter.get(identity.importance, True)
+                
+                if not type_ok or not imp_ok:
+                    logging.debug(f"Skipping {identity.name} ({identity.entity_type}): type_ok={type_ok}, imp_ok={imp_ok}")
+                    continue
+                
+                logging.debug(f"Rendering {identity.name} at ({state.x}, {state.y})")
                 self._add_entity_to_ui(identity, state, f"entity-{identity.entity_type.lower()}")
+                entities_rendered += 1
             
+            events_rendered = 0
             if self.gui.type_filter.get('Event', True):
                 for ev in self.gui.state.events:
                     self._add_event_to_ui(ev)
+                    events_rendered += 1
+            
+            logging.info(f"Rendered {entities_rendered} entities and {events_rendered} events")
+            ui.notify(f"Rendered {entities_rendered} entities and {events_rendered} events")
 
     def _add_entity_to_ui(self, identity: EntityIdentity, state: EntityState, css_class: str):
         card = ui.card().classes(f'entity-block p-0 {css_class}').style(f'left: {state.x}px; top: {state.y}px')

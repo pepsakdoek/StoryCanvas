@@ -28,7 +28,8 @@ def show_edit_event_dialog(gui, ev: Event):
     dialog.open()
 
 def _save_event(gui, uid, form, dialog):
-    if not form['name']:
+    name = form['name'].strip()
+    if not name:
         ui.notify("Name is required", type='negative')
         return
 
@@ -39,7 +40,7 @@ def _save_event(gui, uid, form, dialog):
             ui.notify(f"'{t.name}' is required", type='negative')
             return
 
-    ev = Event(uid=uid or str(uuid.uuid4()), name=form['name'], description=form['desc'], 
+    ev = Event(uid=uid or str(uuid.uuid4()), name=name, description=form['desc'], 
                importance=form['importance'], attributes=form['attributes'], x=form['x'], y=form['y'])
     gui.state.save_event(ev)
     gui._refresh_canvas_content()

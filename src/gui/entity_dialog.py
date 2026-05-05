@@ -13,7 +13,10 @@ def show_add_entity_dialog(gui, etype: str):
     dialog.open()
 
 def _create_entity(gui, etype, form, dialog):
-    if not form['name']: 
+    import logging
+    name = form['name'].strip()
+    logging.info(f"Attempting to create {etype}: '{name}'")
+    if not name: 
         ui.notify("Name is required", type='negative')
         return
     
@@ -24,9 +27,11 @@ def _create_entity(gui, etype, form, dialog):
             ui.notify(f"'{t.name}' is required", type='negative')
             return
 
-    gui.state.create_entity(form['name'], etype, form.get('importance', 'extra'), form['attributes'])
+    uid = gui.state.create_entity(name, etype, form.get('importance', 'extra'), form['attributes'])
+    logging.info(f"Entity created with UID: {uid}. Refreshing canvas...")
     gui._refresh_canvas_content()
     dialog.close()
+    ui.notify(f"Created {etype}: {name}")
 
 def show_edit_entity_dialog(gui, identity, state):
     form = {'name': identity.name, 'importance': identity.importance, 'attributes': state.attributes.copy(), 'x': state.x, 'y': state.y}
@@ -43,6 +48,7 @@ def show_edit_entity_dialog(gui, identity, state):
     dialog.open()
 
 def _save_entity_edit(gui, uid, form, dialog):
+    name = form['name'].strip()
     identity = gui.state.registry.entities.get(uid)
     if identity:
         # Validate required attributes
@@ -52,7 +58,8 @@ def _save_entity_edit(gui, uid, form, dialog):
                 ui.notify(f"'{t.name}' is required", type='negative')
                 return
 
-    gui.state.update_identity(uid, form['name'], form.get('importance', 'extra'))
+    gui.state.update_identity(uid, name, form.get('importance', 'extra'))
     gui.state.update_state(uid, float(form['x']), float(form['y']), form['attributes'])
     gui._refresh_canvas_content()
     dialog.close()
+    ui.notify(f"Updated {name}")

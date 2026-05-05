@@ -2,14 +2,24 @@ from nicegui import ui
 
 STYLE_DEFINITION = '''
 <style>
-    body { overflow: hidden; }
+    body { 
+        overflow: hidden; 
+        margin: 0; 
+        padding: 0; 
+    }
+    .nicegui-content { 
+        padding: 0 !important; 
+        height: 100vh !important; 
+        width: 100vw !important; 
+        overflow: hidden;
+    }
     .canvas-container {
         background-color: #f0f4f8;
         position: relative; overflow: hidden;
     }
     .canvas-content {
         position: absolute; top: 0; left: 0;
-        width: 100%; height: 100%;
+        width: 10000px; height: 10000px;
         transform-origin: 0 0;
     }
     .cursor-grab { cursor: grab !important; }
