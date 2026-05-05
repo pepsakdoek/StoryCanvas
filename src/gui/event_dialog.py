@@ -7,24 +7,24 @@ def show_add_event_dialog(gui):
     form = {'name': '', 'desc': '', 'importance': gui.state.settings.importance_levels[-1], 'attributes': {}, 'x': 500, 'y': 500}
     with ui.dialog() as dialog, ui.card().classes('w-96'):
         ui.label('New Event').classes('text-h6')
-        ui.input('Event Name', on_change=lambda e: form.update({'name': e.value}))
-        ui.textarea('Description', on_change=lambda e: form.update({'desc': e.value}))
-        ui.select(gui.state.settings.importance_levels, label='Importance', value=form['importance'], on_change=lambda e: form.update({'importance': e.value}))
+        ui.input('Event Name', on_change=lambda e: form.update({'name': e.value})).classes('w-full').props('id=event-add-name')
+        ui.textarea('Description', on_change=lambda e: form.update({'desc': e.value})).classes('w-full').props('id=event-add-desc')
+        ui.select(gui.state.settings.importance_levels, label='Importance', value=form['importance'], on_change=lambda e: form.update({'importance': e.value})).classes('w-full').props('id=event-add-importance')
         attr_cont = ui.column().classes('w-full gap-1')
         fill_attr_container(gui, "Event", attr_cont, form)
-        ui.button('Create Event', on_click=lambda: _save_event(gui, None, form, dialog))
+        ui.button('Create Event', on_click=lambda: _save_event(gui, None, form, dialog)).classes('w-full mt-4')
     dialog.open()
 
 def show_edit_event_dialog(gui, ev: Event):
     form = {'name': ev.name, 'desc': ev.description, 'importance': ev.importance, 'attributes': ev.attributes.copy(), 'x': ev.x, 'y': ev.y}
     with ui.dialog() as dialog, ui.card().classes('w-96'):
         ui.label('Edit Event').classes('text-h6')
-        ui.input('Name', value=form['name'], on_change=lambda e: form.update({'name': e.value}))
-        ui.textarea('Description', value=form['desc'], on_change=lambda e: form.update({'desc': e.value}))
-        ui.select(gui.state.settings.importance_levels, label='Importance', value=form['importance'], on_change=lambda e: form.update({'importance': e.value}))
+        ui.input('Name', value=form['name'], on_change=lambda e: form.update({'name': e.value})).classes('w-full').props('id=event-edit-name')
+        ui.textarea('Description', value=form['desc'], on_change=lambda e: form.update({'desc': e.value})).classes('w-full').props('id=event-edit-desc')
+        ui.select(gui.state.settings.importance_levels, label='Importance', value=form['importance'], on_change=lambda e: form.update({'importance': e.value})).classes('w-full').props('id=event-edit-importance')
         attr_cont = ui.column().classes('w-full gap-1')
         fill_attr_container(gui, "Event", attr_cont, form)
-        ui.button('Save', on_click=lambda: _save_event(gui, ev.uid, form, dialog))
+        ui.button('Save', on_click=lambda: _save_event(gui, ev.uid, form, dialog)).classes('w-full mt-4')
     dialog.open()
 
 def _save_event(gui, uid, form, dialog):
