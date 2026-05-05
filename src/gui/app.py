@@ -35,6 +35,7 @@ class StoryCanvasGUI:
         # Filters
         self.importance_filter = {} 
         self.type_filter = {'Actor': True, 'Place': True, 'Item': True, 'Knowledge': True, 'Event': True}
+        self.active_attr_tab = 'Actors'
         logging.info("StoryCanvasGUI initialized.")
 
     def build_selector(self):

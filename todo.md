@@ -1,27 +1,18 @@
 # Things that we want to still implement
-
-[ ] In Settings: 
-  [ ] We have the add attribute button but it doesn't work at the moment
-  [ ] 'Select' inputs must bring up sub menu to add options
-  
-[ ] GUI 
-  [ ] grab the canvas to move it around
-     [ ] Space changes the icon to a hand, but it doesn't drag the icons around
-  [X] Icons should give what it is on hover
+  [ ] Random name / entity generator.  
   [ ] Clicking on the canvas should enable select area, so we can delete many at once (it's really only useful for deletes)
   [ ] Keyboard shortcuts
+  [ ] Implement the 'importance' filter
+  [ ] The current 'tick box' filters at the top doesnt really make sense I think.
+  [ ] Time should have the ability to have 'sub' times. So a chapter is a great starting point, but even in a chapter one might want to split it into parts to 'flow' with the story better
   [ ] Prose Editor Fixes:
-    [ ] UI: Make prose area go down to the bottom of the screen with an independent scroll bar
-    [ ] Bug: Fix first character becoming last character when starting with a blank area (e.g., "Mary" -> "aryM")
+    [ ] First analuse if any of these issues are our fault and how many is the library. Do not try to fix things that are library issues.
+    [ ] UI: The 'rich' edit options are hidden by the chapter toolbar. The hovering header bar is cool, but perhaps we should ditch it so elements can fit neatly.
     [ ] Bug: Fix Enter key adding newline but not moving the cursor
+    [ ] Bug: Fix first character becoming last character when starting with a blank area (e.g., "Mary" -> "aryM") - this might be related to the proposed improvement below
     [ ] Improvement: Debounce or optimize auto-save to prevent cursor jumping during typing
+  [ ] Local / cloud LLM to take a piece of text and create the objects for it (cli), we'll need to generate a system prompt
 
-
-[X] An actual 'Prose' section where the user can write their chapters (Implemented using Quill/ui.editor for lightweight WYSIWYG, optimized for space)
-
-[X] Ability to link back to local LLM or cloud LLM inside the Prose to. (Implemented "Extract Entities" button for LLM analysis of prose)
-
-[ ] Time should have the ability to have 'sub' times. So a chapter is a great starting point, but even in a chapter one might want to split it into parts to 'flow' with the story better
 
 
 # Implementation Notes

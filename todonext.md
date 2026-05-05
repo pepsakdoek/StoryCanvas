@@ -1,7 +1,8 @@
-# Upcoming UI Tasks
+# Upcoming Tasks
 
-- **GUI Refresh for New Attributes:** Fix the issue where adding an attribute in settings requires a dialog restart to see the new input box.
-- **Enhanced 'Select' Attributes:**
-    - Implement a way to manage options for SELECT type attributes.
-    - Add a "[ ] Allow adding new options" setting.
-    - Implement the "type-to-add" logic, ensuring only completed entries (on blur/exit) are saved as new options to prevent partial-string pollution.
+  [ ] Prose Editor Fixes:
+    [ ] First analuse if any of these issues are our fault and how many is the library. Do not try to fix things that are library issues.
+    [ ] UI: The 'rich' edit options are hidden by the chapter toolbar. The hovering header bar is cool, but perhaps we should ditch it so elements can fit neatly.
+    [ ] Bug: Fix Enter key adding newline but not moving the cursor
+    [ ] Bug: Fix first character becoming last character when starting with a blank area (e.g., "Mary" -> "aryM") - this might be related to the proposed improvement below
+    [ ] Improvement: Debounce or optimize auto-save to prevent cursor jumping during typing

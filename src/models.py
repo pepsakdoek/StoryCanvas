@@ -19,6 +19,7 @@ class AttributeTemplate(BaseModel):
     description: str = ""
     attr_type: AttributeType = AttributeType.TEXT
     options: List[str] = Field(default_factory=list) # For SELECT type
+    allow_custom: bool = False # Allow adding new options in GUI
     required: bool = False
     enabled: bool = True
 
