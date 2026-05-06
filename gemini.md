@@ -26,7 +26,10 @@ A data-driven, emergent narrative game. The goal is to provide a "blank canvas" 
 ## Development Notes
 - **Execution:** Always prefer `uv run` to ensure dependencies like `nicegui` and `pydantic` are correctly resolved from the virtual environment.
 - **Main Menu:** Includes 'Create', 'Load', 'Help' (opens `documentation/usage.md`), and 'Exit' (shuts down the server).
-- **Documentation:** `documentation/usage.md` contains the primary end-user guide.
+- **Documentation:** 
+    - `documentation/usage.md` contains the primary end-user guide.
+    - `documentation/index.md` provides a one-line summary of all active source files. **MANDATE:** This index must be updated whenever a new source file is added, renamed, or significantly refactored.
+    - `documentation/functionality.md` tracks GUI/CLI feature parity.
 - **Logs:** Application logs are automatically generated in the `/logs` directory with timestamps.
 
 ## Folder Architecture

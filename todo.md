@@ -7,7 +7,24 @@
   [ ] Time should have the ability to have 'sub' times. So a chapter is a great starting point, but even in a chapter one might want to split it into parts to 'flow' with the story better
   [ ] Local / cloud LLM to take a piece of text and create the objects for it (cli), we'll need to generate a system prompt
 
-
+# CLI Feature Parity (Missing Functionality)
+  [ ] **Canvas Management**
+    - [ ] Auto-Arrange entities via CLI command.
+  [ ] **Entity Management**
+    - [ ] Edit existing entities (Name, Importance, Attributes, Coordinates).
+    - [ ] Filtered listing (e.g., list only Actors, list only Places).
+  [ ] **Event Management**
+    - [ ] Edit existing events (Name, Description, Importance, Attributes, Coordinates).
+  [ ] **Relationship Management**
+    - [ ] Edit existing relationships (Source, Target, Type, Description).
+  [ ] **Prose Management**
+    - [ ] Analyze Prose via LLM to extract entities/events (CLI implementation of `analyze_prose`).
+  [ ] **Settings Management**
+    - [ ] Edit App Settings (LLM Endpoint, Model, Grid/Snap settings).
+    - [ ] Edit Story Settings (Importance Levels).
+    - [ ] Edit Attribute Schemas (Add/Edit/Remove attribute templates for different entity types).
+  [ ] **Generators**
+    - [ ] Better handling of 'Traits' generation results (e.g., allow applying them to an entity).
 
 # Implementation Notes
 
