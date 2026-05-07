@@ -15,36 +15,50 @@ GLOBAL_LOG_LEVEL = logging.DEBUG
 # -----------------------------
 
 def setup_logging():
+    if getattr(setup_logging, "_initialized", False):
+        return
+    setup_logging._initialized = True
+
     if GLOBAL_LOG_LEVEL is None:
         logging.disable(logging.CRITICAL)
         return
 
-    # Create logs directory if it doesn't exist
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "storycanvas.log")
     
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_dir, f"output{timestamp}.log")
+    # Store original streams to avoid recursion if setup_logging is called again
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+
+    # Configure root logger
+    logger = logging.getLogger()
+    logger.setLevel(GLOBAL_LOG_LEVEL)
     
-    # Configure logging
-    logging.basicConfig(
-        level=GLOBAL_LOG_LEVEL,
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
+    # Clear existing handlers if any
+    logger.handlers = []
+
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+
+    # File handler (overwrite mode 'w' to have one clean log per execution)
+    fh = logging.FileHandler(log_file, encoding='utf-8', mode='w')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+
+    # Console handler (using original stdout to avoid redirection loops)
+    ch = logging.StreamHandler(original_stdout)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
     
     # Redirect stdout and stderr to the logger
     class LoggerWriter:
-        def __init__(self, level, original_stream):
-            self.level = level
+        def __init__(self, log_func, original_stream):
+            self.log_func = log_func
             self.original_stream = original_stream
 
         def write(self, message):
             if message.strip():
-                self.level(message.strip())
+                self.log_func(message.strip())
 
         def flush(self):
             self.original_stream.flush()
@@ -52,23 +66,10 @@ def setup_logging():
         def isatty(self):
             return self.original_stream.isatty()
 
-        @property
-        def encoding(self):
-            return self.original_stream.encoding
+    sys.stdout = LoggerWriter(logging.getLogger("STDOUT").info, original_stdout)
+    sys.stderr = LoggerWriter(logging.getLogger("STDERR").error, original_stderr)
 
-        @property
-        def errors(self):
-            return self.original_stream.errors
-
-    # We don't want to infinite loop, so we only redirect if we are careful.
-    # Actually, a better way to capture stdout/stderr is to use a custom handler or just rely on print() 
-    # being used sparingly and logging used for everything else.
-    
-    logger = logging.getLogger("System")
-    sys.stdout = LoggerWriter(logger.info, sys.stdout)
-    sys.stderr = LoggerWriter(logger.error, sys.stderr)
-
-    logging.info(f"Logging initialized. Level: DEBUG. File: {log_file}")
+    logging.info(f"Logging initialized. Level: {logging.getLevelName(GLOBAL_LOG_LEVEL)}. File: {log_file}")
 
 def main():
     setup_logging()
