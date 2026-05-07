@@ -94,18 +94,39 @@ def _generator_cli(state: CanvasState):
             print(f"\nGenerating {gen_type}...")
             result = generate_any(gen_type, state.app_settings.llm_endpoint, state.app_settings.llm_model, count=count, custom_prompt=prompt, force_procedural=force_proc)
             if result:
-                print("\nResult:", json.dumps(result, indent=2))
-                if input("\nSave to Canvas? (y/n): ").lower() == 'y':
+                save = input("\nSave to Canvas? (y/n): ").lower()
+                if save == 'y':
+                    source = result.get('generation_source', 'manual')
                     if gen_type == "Names":
-                        for name in result.get('names', []): state.create_entity(name, "Actor", "extra", {})
+                        for name in result.get('names', []): 
+                            state.create_entity(name, "Actor", "extra", {"Generation Source": source})
                     elif gen_type == "Character":
-                        state.create_entity(result['name'], "Actor", "secondary", {"Role": result['role'], "Personality": result['personality'], "Traits": ", ".join(result['traits'])})
+                        attrs = {
+                            "Role": result['role'], 
+                            "Personality": result['personality'], 
+                            "Traits": ", ".join(result['traits']),
+                            "Generation Source": source
+                        }
+                        state.create_entity(result['name'], "Actor", "secondary", attrs)
                     elif gen_type in ["Place", "Item", "Knowledge"]:
-                        state.create_entity(result['name'], gen_type, "extra", result.get('attributes', {}))
+                        attrs = result.get('attributes', {}).copy()
+                        attrs["Generation Source"] = source
+                        state.create_entity(result['name'], gen_type, "extra", attrs)
                     elif gen_type == "Event":
-                        ev = Event(name=result['name'], description=result['description'], involved_uids=result.get('involved_uids', []), location_uid=result.get('location_uid'), x=result.get('x', 500), y=result.get('y', 500))
+                        attrs = result.get('attributes', {}).copy()
+                        attrs["Generation Source"] = source
+                        ev = Event(
+                            name=result['name'], 
+                            description=result['description'], 
+                            involved_uids=result.get('involved_uids', []), 
+                            location_uid=result.get('location_uid'), 
+                            attributes=attrs,
+                            x=result.get('x', 500), 
+                            y=result.get('y', 500)
+                        )
                         state.save_event(ev)
                     print(f"Saved {gen_type}.")
+
     except Exception as e: print(f"Error: {str(e)}")
 
 def _edit_prose_cli(state: CanvasState):

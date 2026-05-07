@@ -69,82 +69,96 @@ def generate_procedural_event() -> Dict[str, Any]:
 
 def parse_llm_response(response_text: str, expected_model: type) -> Optional[Dict[str, Any]]:
     """Try to parse LLM response as JSON and validate with Pydantic."""
+    import logging
     try:
-        # Try to extract JSON from response (in case of markdown or extra text)
-        if "```json" in response_text:
+        # 1. Try to extract from <JSON> tags (new preferred method)
+        if "<JSON>" in response_text and "</JSON>" in response_text:
+            start = response_text.find("<JSON>") + 6
+            end = response_text.find("</JSON>", start)
+            json_str = response_text[start:end].strip()
+        # 2. Try markdown backticks
+        elif "```json" in response_text:
             start = response_text.find("```json") + 7
             end = response_text.find("```", start)
             json_str = response_text[start:end].strip()
+        # 3. Fallback to raw braces
         else:
-            json_str = response_text.strip()
+            start = response_text.find("{")
+            end = response_text.rfind("}")
+            if start != -1 and end != -1:
+                json_str = response_text[start:end+1].strip()
+            else:
+                json_str = response_text.strip()
         
         data = json.loads(json_str)
+        
+        # Smart Handling: If we wanted names (list) but got a single entity (dict with 'name')
+        if expected_model == NameResponse and "names" not in data and "name" in data:
+            data = {"names": [data["name"]]}
+            
+        # Validate and return everything (extra='allow' ensures non-schema fields are kept)
         return expected_model(**data).model_dump()
-    except (json.JSONDecodeError, ValidationError, AttributeError):
+    except json.JSONDecodeError as e:
+        logging.error(f"LLM JSON Decode Error: {e}. Raw text: {response_text[:500]}...")
+        return None
+    except ValidationError as e:
+        logging.error(f"LLM Validation Error: {e}. Data: {json_str[:500]}...")
+        return None
+    except Exception as e:
+        logging.error(f"LLM Parse Error: {e}")
         return None
 
 def generate_with_llm(prompt: str, endpoint: str, model: str, expected_model: type) -> Optional[Dict[str, Any]]:
     """Send a prompt to a local Ollama-compatible LLM and return parsed JSON."""
+    import logging
     try:
         payload = {
             "model": model,
             "prompt": prompt,
             "stream": False
+            # Removed "format": "json" to allow vocal models to provide context around tags
         }
-        response = requests.post(endpoint, json=payload, timeout=15)
+        logging.info(f"Sending LLM request to {endpoint} (Model: {model})")
+        response = requests.post(endpoint, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
         response_text = data.get("response", "").strip()
+        if not response_text:
+            logging.warning("LLM returned empty response")
+            return None
         return parse_llm_response(response_text, expected_model)
-    except Exception:
-        # Silently fail, caller will handle fallback
+    except requests.exceptions.RequestException as e:
+        logging.error(f"LLM Request Failed: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"LLM Unexpected Error: {e}")
         return None
 
 def get_generator_prompt(gen_type: str, count: int = 1, custom_prompt: str = "") -> str:
     """Build prompt based on generator type."""
+    tag_instruction = "IMPORTANT: You MUST wrap your final JSON object in <JSON> and </JSON> tags. You may provide conversational context outside of these tags."
+    
     if gen_type == "Names":
-        return custom_prompt or (
-            f"You are a creative name generator. "
-            f"Return ONLY a JSON object with a 'names' array of {count} unique fantasy names. "
-            f"Example: {{'names': ['Aelar', 'Kira', 'Thorne']}}"
-        )
+        return (custom_prompt or f"Generate {count} unique fantasy names.") + f"\n{tag_instruction}\nExample: <JSON>{{\"names\": [\"Aelar\", \"Kira\"]}}</JSON>"
+    
     elif gen_type == "Traits":
-        return custom_prompt or (
-            f"You are a trait randomizer. "
-            f"Return ONLY a JSON object with a 'traits' array of {count} personality traits. "
-            f"Example: {{'traits': ['brave', 'wise', 'loyal']}}"
-        )
+        return (custom_prompt or f"Generate {count} personality traits.") + f"\n{tag_instruction}\nExample: <JSON>{{\"traits\": [\"brave\", \"loyal\"]}}</JSON>"
+    
     elif gen_type == "Character":
-        return custom_prompt or (
-            "You are a character generator. "
-            "Return ONLY a JSON object with keys: name, role, personality, and traits (array of 2-4 traits). "
-            "Example: {'name': 'Kira', 'role': 'warrior', 'personality': 'brave', 'traits': ['loyal', 'fierce', 'honest']}"
-        )
+        return (custom_prompt or "Generate a detailed character.") + f"\n{tag_instruction}\nExample: <JSON>{{\"name\": \"Kira\", \"role\": \"warrior\", \"personality\": \"brave\", \"traits\": [\"loyal\", \"fierce\"]}}</JSON>"
+    
     elif gen_type == "Place":
-        return custom_prompt or (
-            "You are a place generator. "
-            "Return ONLY a JSON object with keys: name, type, description, and attributes (key-value strings). "
-            "Example: {'name': 'Eldoria', 'type': 'forest', 'description': 'A mystical woodland', 'attributes': {'danger': 'low', 'size': 'large'}}"
-        )
+        return (custom_prompt or "Generate a mystical location.") + f"\n{tag_instruction}\nExample: <JSON>{{\"name\": \"Eldoria\", \"type\": \"forest\", \"description\": \"A mystical woodland\", \"attributes\": {{\"danger\": \"low\"}}}}</JSON>"
+    
     elif gen_type == "Item":
-        return custom_prompt or (
-            "You are an item generator. "
-            "Return ONLY a JSON object with keys: name, type, description, and attributes (key-value strings). "
-            "Example: {'name': 'Shadowblade', 'type': 'weapon', 'description': 'A blade that drinks light', 'attributes': {'rarity': 'rare', 'damage': 'high'}}"
-        )
+        return (custom_prompt or "Generate a storied item.") + f"\n{tag_instruction}\nExample: <JSON>{{\"name\": \"Shadowblade\", \"type\": \"weapon\", \"description\": \"A dark blade\", \"attributes\": {{\"rarity\": \"rare\"}}}}</JSON>"
+    
     elif gen_type == "Knowledge":
-        return custom_prompt or (
-            "You are a knowledge generator. "
-            "Return ONLY a JSON object with keys: name, type, description, and attributes (key-value strings). "
-            "Example: {'name': 'The Lost Ritual', 'type': 'secret', 'description': 'A forgotten ceremony', 'attributes': {'difficulty': 'hard'}}"
-        )
+        return (custom_prompt or "Generate a fragment of lore or a secret.") + f"\n{tag_instruction}\nExample: <JSON>{{\"name\": \"The Ritual\", \"type\": \"secret\", \"description\": \"A lost ceremony\", \"attributes\": {{\"difficulty\": \"hard\"}}}}</JSON>"
+    
     elif gen_type == "Event":
-        return custom_prompt or (
-            "You are an event generator. "
-            "Return ONLY a JSON object with keys: name, description, involved_uids (array of strings), location_uid (string), x (int), y (int). "
-            "Note: `involved_uids` and `location_uid` are placeholders for linking to existing entities. "
-            "Example: {'name': 'The Battle', 'description': 'A clash between two factions', 'involved_uids': ['UID1', 'UID2'], 'location_uid': 'PLACE1', 'x': 500, 'y': 600}"
-        )
+        return (custom_prompt or "Generate a narrative event.") + f"\n{tag_instruction}\nExample: <JSON>{{\"name\": \"The Clash\", \"description\": \"A battle\", \"involved_uids\": [], \"location_uid\": \"\", \"x\": 500, \"y\": 600}}</JSON>"
+    
     return custom_prompt or "Generate something creative."
 
 def get_expected_model(gen_type: str) -> type:
@@ -186,27 +200,32 @@ def generate_any(gen_type: str, endpoint: str, model: str, count: int = 1, custo
         expected_model = get_expected_model(gen_type)
         result = generate_with_llm(prompt, endpoint, model, expected_model)
         if result:
+            result['generation_source'] = 'llm'
             return result
     
     # Fallback
+    res = {}
     if gen_type == "Names":
-        return {"names": generate_procedural_names(count)}
+        res = {"names": generate_procedural_names(count)}
     elif gen_type == "Traits":
-        return {"traits": generate_procedural_traits(count)}
+        res = {"traits": generate_procedural_traits(count)}
     elif gen_type == "Character":
-        return {
+        res = {
             "name": generate_procedural_name(),
             "role": "adventurer",
             "personality": "curious",
             "traits": generate_procedural_traits(3)
         }
     elif gen_type == "Place":
-        return generate_procedural_place()
+        res = generate_procedural_place()
     elif gen_type == "Item":
-        return generate_procedural_item()
+        res = generate_procedural_item()
     elif gen_type == "Knowledge":
-        return generate_procedural_knowledge()
+        res = generate_procedural_knowledge()
     elif gen_type == "Event":
-        return generate_procedural_event()
+        res = generate_procedural_event()
+    else:
+        res = {"names": [generate_procedural_name()]}
     
-    return {"names": [generate_procedural_name()]}
+    res['generation_source'] = 'procedural'
+    return res

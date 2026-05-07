@@ -25,40 +25,47 @@ def setup_logging():
 
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "storycanvas.log")
     
-    # Store original streams to avoid recursion if setup_logging is called again
+    # Restore datestamped filename as requested
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_dir, f"output{timestamp}.log")
+    
+    # Store original streams
     original_stdout = sys.stdout
     original_stderr = sys.stderr
 
     # Configure root logger
     logger = logging.getLogger()
     logger.setLevel(GLOBAL_LOG_LEVEL)
-    
-    # Clear existing handlers if any
     logger.handlers = []
 
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
-    # File handler (overwrite mode 'w' to have one clean log per execution)
     fh = logging.FileHandler(log_file, encoding='utf-8', mode='w')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    # Console handler (using original stdout to avoid redirection loops)
     ch = logging.StreamHandler(original_stdout)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     
-    # Redirect stdout and stderr to the logger
     class LoggerWriter:
         def __init__(self, log_func, original_stream):
             self.log_func = log_func
             self.original_stream = original_stream
+            self._lock = False # Simple re-entry guard
 
         def write(self, message):
+            if self._lock:
+                self.original_stream.write(message)
+                return
+            
             if message.strip():
-                self.log_func(message.strip())
+                self._lock = True
+                try:
+                    self.log_func(message.strip())
+                finally:
+                    self._lock = False
 
         def flush(self):
             self.original_stream.flush()

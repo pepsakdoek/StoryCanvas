@@ -47,44 +47,64 @@ class CanvasSettings(BaseModel):
     knowledge_attributes: List[AttributeTemplate] = [AttributeTemplate(name="Source")]
     event_attributes: List[AttributeTemplate] = []
 
+from pydantic import BaseModel, Field, ConfigDict
+from enum import Enum
+import uuid
+
+# ... (other models)
+
 # --- Generator Response Models ---
 class NameResponse(BaseModel):
-    names: List[str]
+    model_config = ConfigDict(extra='allow')
+    names: List[str] = Field(default_factory=list)
+    generation_source: str = "manual"
 
 class TraitResponse(BaseModel):
-    traits: List[str]
+    model_config = ConfigDict(extra='allow')
+    traits: List[str] = Field(default_factory=list)
+    generation_source: str = "manual"
 
 class CharacterResponse(BaseModel):
-    name: str
-    role: str
-    personality: str
-    traits: List[str]
+    model_config = ConfigDict(extra='allow')
+    name: str = "Unknown"
+    role: str = ""
+    personality: str = ""
+    traits: List[str] = Field(default_factory=list)
+    generation_source: str = "manual"
 
 class PlaceResponse(BaseModel):
-    name: str
-    type: str
-    description: str
-    attributes: Dict[str, str]
+    model_config = ConfigDict(extra='allow')
+    name: str = "Unknown"
+    type: str = ""
+    description: str = ""
+    attributes: Dict[str, str] = Field(default_factory=dict)
+    generation_source: str = "manual"
 
 class ItemResponse(BaseModel):
-    name: str
-    type: str
-    description: str
-    attributes: Dict[str, str]
+    model_config = ConfigDict(extra='allow')
+    name: str = "Unknown"
+    type: str = ""
+    description: str = ""
+    attributes: Dict[str, str] = Field(default_factory=dict)
+    generation_source: str = "manual"
 
 class KnowledgeResponse(BaseModel):
-    name: str
-    type: str
-    description: str
-    attributes: Dict[str, str]
+    model_config = ConfigDict(extra='allow')
+    name: str = "Unknown"
+    type: str = ""
+    description: str = ""
+    attributes: Dict[str, str] = Field(default_factory=dict)
+    generation_source: str = "manual"
 
 class EventResponse(BaseModel):
-    name: str
-    description: str
+    model_config = ConfigDict(extra='allow')
+    name: str = "Unknown"
+    description: str = ""
     involved_uids: List[str] = Field(default_factory=list)
     location_uid: str = ""
     x: int = 500
     y: int = 500
+    generation_source: str = "manual"
 
 # --- Global Identity ---
 class EntityIdentity(BaseModel):
