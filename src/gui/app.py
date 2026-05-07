@@ -105,9 +105,12 @@ class StoryCanvasGUI:
                     ui.label('Chapters:').classes('text-[10px] font-bold text-slate-400 uppercase tracking-wider')
                     for i, slot in enumerate(self.state.get_slots()):
                         active = slot == self.state.current_slot
-                        with ui.element('div').classes('slot-bubble' + (' active' if active else '')) \
-                            .on('click', lambda _, s=slot: self._switch_slot(s)).tooltip(slot):
+                        bubble = ui.element('div').classes('slot-bubble' + (' active' if active else '')) \
+                            .on('click', lambda _, s=slot: self._switch_slot(s)).tooltip(slot)
+                        with bubble:
                             ui.label(str(i+1))
+                            with ui.menu():
+                                ui.menu_item('Delete Chapter', on_click=lambda s=slot: self._delete_slot(s)).classes('text-red-500')
                     ui.button(icon='add', on_click=self.dialogs.add_slot_dialog).props('round flat dense color=blue').tooltip("Add Chapter")
                     ui.separator().props('vertical')
                     ui.button(icon='settings', on_click=self.dialogs.edit_settings_dialog).props('round flat color=slate-400').tooltip("Canvas Settings")
@@ -166,6 +169,25 @@ class StoryCanvasGUI:
 
     def _switch_slot(self, name):
         self.state.switch_slot(name); self.build_canvas()
+
+    def _delete_slot(self, name):
+        if len(self.state.get_slots()) <= 1:
+            ui.notify("Cannot delete the only chapter.", type='warning')
+            return
+        
+        async def confirm():
+            if self.state.delete_slot(name):
+                ui.notify(f"Deleted chapter: {name}")
+                self.build_canvas()
+            dialog.close()
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label(f"Delete chapter '{name}'?").classes('text-lg font-bold')
+            ui.label("This will permanently remove all data for this chapter.")
+            with ui.row().classes('w-full justify-end gap-2'):
+                ui.button('Cancel', on_click=dialog.close).props('flat')
+                ui.button('Delete', on_click=confirm).props('flat color=red')
+        dialog.open()
 
     def _delete_entity(self, uid):
         self.state.delete_entity(uid); self._refresh_canvas_content()

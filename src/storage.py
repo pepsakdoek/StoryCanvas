@@ -276,6 +276,18 @@ class CanvasState:
         with open(self.relationships_file, "w") as f:
             json.dump([r.model_dump() for r in self.relationships], f, indent=4)
 
+    def delete_slot(self, name: str):
+        if name not in self.get_slots(): return False
+        if len(self.get_slots()) <= 1: return False
+        
+        target_path = os.path.join(self.slots_dir, name)
+        shutil.rmtree(target_path)
+        
+        if self.current_slot == name:
+            self.current_slot = self.get_slots()[0]
+            self._load_current_slot()
+        return True
+
 def get_available_canvases():
     if not os.path.exists(SAVES_DIR): return []
     return sorted([d for d in os.listdir(SAVES_DIR) if os.path.isdir(os.path.join(SAVES_DIR, d))])
