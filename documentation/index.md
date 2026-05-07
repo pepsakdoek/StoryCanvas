@@ -6,10 +6,17 @@ This index provides a brief overview of all active source files in the StoryCanv
 *   `StoryCanvas.py`: Main entry point that initializes logging and launches either the GUI or CLI mode.
 
 ## Core Logic (`src/`)
-*   `src/cli.py`: Implements the command-line interface and terminal-based user workflow.
 *   `src/generators.py`: Handles procedural and LLM-powered generation of names, entities, and events.
 *   `src/models.py`: Defines the Pydantic data models for entities, relationships, events, and settings.
 *   `src/storage.py`: Manages file system persistence, directory structures, and canvas state transitions.
+
+## CLI Layer (`src/cli/`)
+*   `src/cli/__init__.py`: Entry point for CLI mode and main menu orchestration.
+*   `src/cli/entities.py`: Logic for adding, editing, and deleting Actors, Places, Items, Knowledge, and Events.
+*   `src/cli/relationships.py`: Logic for managing links between entities and events.
+*   `src/cli/chapters.py`: Logic for chapter (slot) creation, switching, and deletion.
+*   `src/cli/settings.py`: Logic for managing global app settings, importance levels, and attribute schemas.
+*   `src/cli/utils.py`: Shared helper functions for input handling, importance selection, and entity listing.
 
 ## GUI Layer (`src/gui/`)
 *   `src/gui/app.py`: Orchestrates the main NiceGUI layout, header bar, and prose panel.
