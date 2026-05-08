@@ -177,15 +177,24 @@ class StoryCanvasGUI:
 
         if target_slot != self.state.current_slot:
             self.state.switch_slot(target_slot)
-            # Full rebuild to refresh canvas and prose panel
             self.build_canvas()
-        else:
-            # Just refresh the beats list to update highlight
-            self._render_beats.refresh()
-            
-        # Scroll to the highlighted beat after a short delay to ensure rendering
-        # Note: we use JS for precise scrolling
-        ui.run_javascript(f"document.getElementById('beat-{target_beat}')?.scrollIntoView({{behavior: 'smooth', block: 'center'}})")
+        
+        # Precise scrolling in the rich editor using JS
+        # We look for the n-th paragraph or div in the editor and scroll to it
+        js_scroll = f"""
+            var editor = document.getElementById('prose-editor');
+            if (editor) {{
+                var paras = editor.querySelectorAll('p, div');
+                if (paras.length > {target_beat}) {{
+                    paras[{target_beat}].scrollIntoView({{behavior: 'smooth', block: 'center'}});
+                    // Add a temporary highlight effect
+                    var originalBg = paras[{target_beat}].style.backgroundColor;
+                    paras[{target_beat}].style.backgroundColor = '#f0f9ff';
+                    setTimeout(() => paras[{target_beat}].style.backgroundColor = originalBg, 2000);
+                }}
+            }}
+        """
+        ui.run_javascript(js_scroll)
 
     def _handle_key(self, e: events.KeyEventArguments):
         if e.key == ' ':
@@ -328,54 +337,29 @@ class StoryCanvasGUI:
                 self.prose_title = ui.input(value=self.state.prose.title, placeholder='Chapter Title') \
                     .classes('grow text-sm').props('dense borderless').on('change', self._save_prose)
                 with ui.row().classes('gap-1'):
-                    ui.button(icon='add', on_click=self._add_beat).props('flat dense round color=blue').tooltip('Add Beat')
                     ui.button(icon='auto_awesome', on_click=self._prose_llm_action).props('flat dense round color=amber-7').tooltip('Extract Entities (LLM)')
                     ui.button(icon='save', on_click=lambda: self._save_prose(notify=True)).props('flat dense round color=blue-5').tooltip('Save')
             
-            self.beats_container = ui.scroll_area().classes('w-full flex-1')
-            with self.beats_container:
-                self._render_beats()
+            # Combine beats into one block for the rich editor
+            content = "\n\n".join([b.text for b in self.state.prose.beats])
+            self.prose_editor = ui.editor(value=content).classes('w-full flex-1 text-sm overflow-auto').props('id=prose-editor')
+            self.prose_editor.props('flat square dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p')
+            self.prose_editor.on_value_change(self._handle_prose_change)
 
-    @ui.refreshable
-    def _render_beats(self):
-        if not self.state: return
-        with ui.column().classes('w-full gap-2 p-1'):
-            if not self.state.prose.beats:
-                ui.label("No beats yet. Click '+' to start writing.").classes('text-slate-400 text-xs text-center w-full mt-4')
-            
-            for i, beat in enumerate(self.state.prose.beats):
-                is_active = (i == self.active_beat_idx)
-                # Assign id for scrolling and active class for highlight
-                with ui.element('div').classes(f'w-full group beat-card {"active" if is_active else ""}') \
-                    .props(f'id=beat-{i}'):
-                    with ui.row().classes('w-full items-start gap-2'):
-                        ui.label(f"{i+1}").classes(f'text-[9px] font-bold mt-3 w-4 text-right {"text-blue-500" if is_active else "text-slate-300"}')
-                        editor = ui.textarea(value=beat.text, on_change=lambda e, b=beat: self._handle_beat_change(b, e.value)) \
-                            .classes('grow text-sm bg-white p-2 rounded border border-transparent hover:border-slate-200 transition-colors') \
-                            .props('autosize dense borderless')
-                        with ui.column().classes('opacity-0 group-hover:opacity-100 transition-opacity'):
-                            ui.button(icon='delete', on_click=lambda _, b=beat: self._delete_beat(b)).props('flat dense round color=red-3 text-xs')
+            with ui.row().classes('w-full justify-between items-center px-1'):
+                ui.label('Rich Editor').classes('text-[10px] text-slate-400 uppercase tracking-tighter')
+                self.char_count_label = ui.label(f'Chars: {len(content)}').classes('text-[10px] text-slate-400')
 
-    def _add_beat(self):
-        from ..models import Beat
-        self.state.prose.beats.append(Beat(text=""))
-        self._render_beats.refresh()
-
-    def _delete_beat(self, beat):
-        self.state.prose.beats = [b for b in self.state.prose.beats if b.uid != beat.uid]
-        self._render_beats.refresh()
-        self._save_prose()
-
-    def _handle_beat_change(self, beat, value):
-        beat.text = value
-        # Debounce logic
+    def _handle_prose_change(self, e):
+        if hasattr(self, 'char_count_label'):
+            self.char_count_label.text = f'Chars: {len(e.value or "")}'
         if self.prose_save_timer:
             self.prose_save_timer.cancel()
         self.prose_save_timer = ui.timer(1.5, self._save_prose, once=True)
 
     async def _prose_llm_action(self):
-        full_content = "\n\n".join([b.text for b in self.state.prose.beats])
-        if len(full_content) < 10:
+        content = self.prose_editor.value
+        if not content or len(content) < 10:
             ui.notify("Prose is too short for analysis", type='warning')
             return
             
@@ -383,7 +367,7 @@ class StoryCanvasGUI:
         ui.notify("Analyzing prose with LLM...", type='ongoing', spinner=True)
         
         result = await run.io_bound(analyze_prose,
-            full_content,
+            content,
             self.state.app_settings.llm_endpoint,
             self.state.app_settings.llm_model
         )
@@ -401,7 +385,19 @@ class StoryCanvasGUI:
     def _save_prose(self, e=None, notify=False):
         if not self.state: return
         self.state.prose.title = self.prose_title.value
-        # Beats are updated in-place via _handle_beat_change
+        content = self.prose_editor.value
+        
+        # Heuristic: split by double-newline to maintain 'Beats' for the timeline
+        # We strip HTML tags for the internal text storage if possible, 
+        # but ui.editor content is better kept as is if we want rich text.
+        # For the Beat model, we'll store the rich text fragments.
+        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        
+        from ..models import Beat
+        # Try to preserve UIDs for existing beats if they haven't changed much
+        # For now, simple replacement is safer for consistency
+        self.state.prose.beats = [Beat(text=p) for p in paragraphs]
+        
         self.state.save_prose(self.state.prose)
         if notify:
             ui.notify("Prose saved!", type='positive', position='top')
