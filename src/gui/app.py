@@ -15,6 +15,7 @@ class StoryCanvasGUI:
         logging.info("Initializing StoryCanvasGUI...")
         self.state: Optional[CanvasState] = None
         self.active_entity: Optional[Dict[str, Any]] = None
+        self.active_beat_idx = -1
         self.canvas_container: Optional[ui.element] = None
         self.canvas_content: Optional[ui.element] = None
         
@@ -120,6 +121,7 @@ class StoryCanvasGUI:
 
             # Main content area: Canvas on left (75%) + Prose on right (25%)
             with ui.row().classes('w-full flex-1 gap-0 overflow-hidden').props('id=workspace-row'):
+                # ... (canvas and prose panels)
                 # Canvas area (75%)
                 self.canvas_container = ui.element('div').classes('canvas-container w-3/4 h-full relative').props('id=canvas-viewport')
                 self.canvas_container.on('mousedown', self._handle_canvas_mousedown)
@@ -132,7 +134,6 @@ class StoryCanvasGUI:
                     ui.label("CANVAS CONTAINER ACTIVE").classes('absolute-center text-slate-200 text-4xl pointer-events-none opacity-20 z-0')
                     
                     # Inner content that will be transformed for panning
-                    # We use absolute positioning for the content within the relative container
                     self.canvas_content = ui.element('div').classes('canvas-content').props('id=canvas-surface')
                     self._apply_pan()
                     with self.canvas_content:
@@ -141,6 +142,50 @@ class StoryCanvasGUI:
                 # Prose area (25%)
                 with ui.column().classes('w-1/4 h-full border-l border-slate-300 overflow-hidden bg-white').props('id=prose-panel'):
                     self._build_prose_panel()
+
+            # FOOTER TIMELINE BAR
+            with ui.row().classes('w-full h-12 bg-slate-800 text-white items-center px-4 gap-4 z-[100] shadow-[0_-2px_10px_rgba(0,0,0,0.2)]'):
+                ui.icon('reorder').classes('text-slate-400')
+                
+                tmap = self.state.get_timeline_map()
+                
+                # Find current global index
+                current_idx = 0
+                for i, m in enumerate(tmap['mapping']):
+                    if m['slot'] == self.state.current_slot:
+                        current_idx = i
+                        break
+
+                self.timeline_label = ui.label(f"Chapter: {self.state.current_slot} | Beat: 1").classes('text-[10px] font-mono w-48 text-slate-300')
+                
+                self.timeline_slider = ui.slider(min=0, max=tmap['total_beats'] - 1, value=current_idx, on_change=lambda e: self._on_timeline_change(e.value)) \
+                    .classes('grow').props('color=blue-5 dark label-always')
+                
+                ui.label(f"{tmap['total_beats']} Total Beats").classes('text-[10px] font-mono text-slate-500')
+
+    def _on_timeline_change(self, value):
+        if not self.state: return
+        tmap = self.state.get_timeline_map()
+        if value >= len(tmap['mapping']): return
+        
+        info = tmap['mapping'][value]
+        target_slot = info['slot']
+        target_beat = info['beat_idx']
+        
+        self.timeline_label.text = f"Chapter: {target_slot} | Beat: {target_beat + 1}"
+        self.active_beat_idx = target_beat
+
+        if target_slot != self.state.current_slot:
+            self.state.switch_slot(target_slot)
+            # Full rebuild to refresh canvas and prose panel
+            self.build_canvas()
+        else:
+            # Just refresh the beats list to update highlight
+            self._render_beats.refresh()
+            
+        # Scroll to the highlighted beat after a short delay to ensure rendering
+        # Note: we use JS for precise scrolling
+        ui.run_javascript(f"document.getElementById('beat-{target_beat}')?.scrollIntoView({{behavior: 'smooth', block: 'center'}})")
 
     def _handle_key(self, e: events.KeyEventArguments):
         if e.key == ' ':
@@ -168,6 +213,7 @@ class StoryCanvasGUI:
         self.canvas.refresh_canvas_content()
 
     def _switch_slot(self, name):
+        self.active_beat_idx = -1
         self.state.switch_slot(name); self.build_canvas()
 
     def _delete_slot(self, name):
@@ -282,49 +328,65 @@ class StoryCanvasGUI:
                 self.prose_title = ui.input(value=self.state.prose.title, placeholder='Chapter Title') \
                     .classes('grow text-sm').props('dense borderless').on('change', self._save_prose)
                 with ui.row().classes('gap-1'):
+                    ui.button(icon='add', on_click=self._add_beat).props('flat dense round color=blue').tooltip('Add Beat')
                     ui.button(icon='auto_awesome', on_click=self._prose_llm_action).props('flat dense round color=amber-7').tooltip('Extract Entities (LLM)')
                     ui.button(icon='save', on_click=lambda: self._save_prose(notify=True)).props('flat dense round color=blue-5').tooltip('Save')
             
-            # Using ui.editor for a lightweight WYSIWYG experience
-            self.prose_editor = ui.editor(value=self.state.prose.content).classes('w-full flex-1 text-sm overflow-auto').props('id=prose-editor')
-            # Customizing the editor:
-            # - paragraph-tag="p": ensures standard HTML paragraph behavior which often fixes Enter key issues
-            self.prose_editor.props('flat square dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p')
-            
-            # We use a custom event handler for debouncing
-            self.prose_editor.on_value_change(self._handle_prose_change)
-            
-            with ui.row().classes('w-full justify-between items-center px-1'):
-                ui.label('WYSIWYG Editor').classes('text-[10px] text-slate-400 uppercase tracking-tighter')
-                self.char_count_label = ui.label(f'Chars: {len(self.state.prose.content)}').classes('text-[10px] text-slate-400')
+            self.beats_container = ui.scroll_area().classes('w-full flex-1')
+            with self.beats_container:
+                self._render_beats()
 
-    def _handle_prose_change(self, e):
-        # Update char count immediately for feedback
-        if hasattr(self, 'char_count_label'):
-            self.char_count_label.text = f'Chars: {len(e.value or "")}'
-        
-        # Debounce the disk save
+    @ui.refreshable
+    def _render_beats(self):
+        if not self.state: return
+        with ui.column().classes('w-full gap-2 p-1'):
+            if not self.state.prose.beats:
+                ui.label("No beats yet. Click '+' to start writing.").classes('text-slate-400 text-xs text-center w-full mt-4')
+            
+            for i, beat in enumerate(self.state.prose.beats):
+                is_active = (i == self.active_beat_idx)
+                # Assign id for scrolling and active class for highlight
+                with ui.element('div').classes(f'w-full group beat-card {"active" if is_active else ""}') \
+                    .props(f'id=beat-{i}'):
+                    with ui.row().classes('w-full items-start gap-2'):
+                        ui.label(f"{i+1}").classes(f'text-[9px] font-bold mt-3 w-4 text-right {"text-blue-500" if is_active else "text-slate-300"}')
+                        editor = ui.textarea(value=beat.text, on_change=lambda e, b=beat: self._handle_beat_change(b, e.value)) \
+                            .classes('grow text-sm bg-white p-2 rounded border border-transparent hover:border-slate-200 transition-colors') \
+                            .props('autosize dense borderless')
+                        with ui.column().classes('opacity-0 group-hover:opacity-100 transition-opacity'):
+                            ui.button(icon='delete', on_click=lambda _, b=beat: self._delete_beat(b)).props('flat dense round color=red-3 text-xs')
+
+    def _add_beat(self):
+        from ..models import Beat
+        self.state.prose.beats.append(Beat(text=""))
+        self._render_beats.refresh()
+
+    def _delete_beat(self, beat):
+        self.state.prose.beats = [b for b in self.state.prose.beats if b.uid != beat.uid]
+        self._render_beats.refresh()
+        self._save_prose()
+
+    def _handle_beat_change(self, beat, value):
+        beat.text = value
+        # Debounce logic
         if self.prose_save_timer:
             self.prose_save_timer.cancel()
-        
-        # Save after 1 second of inactivity
-        self.prose_save_timer = ui.timer(1.0, self._save_prose, once=True)
+        self.prose_save_timer = ui.timer(1.5, self._save_prose, once=True)
 
     async def _prose_llm_action(self):
-        if not self.state.prose.content or len(self.state.prose.content) < 10:
+        full_content = "\n\n".join([b.text for b in self.state.prose.beats])
+        if len(full_content) < 10:
             ui.notify("Prose is too short for analysis", type='warning')
             return
             
         from ..generators import analyze_prose
         ui.notify("Analyzing prose with LLM...", type='ongoing', spinner=True)
         
-        # Use a background task or just await if it's fast enough (it's a request, so it might block if not careful)
-        # In NiceGUI, we can use run.io_bound for blocking calls
-        result = await app.run_task(lambda: analyze_prose(
-            self.state.prose.content,
+        result = await run.io_bound(analyze_prose,
+            full_content,
             self.state.app_settings.llm_endpoint,
             self.state.app_settings.llm_model
-        ))
+        )
         
         if result:
             with ui.dialog() as dialog, ui.card().classes('w-[600px]'):
@@ -339,7 +401,7 @@ class StoryCanvasGUI:
     def _save_prose(self, e=None, notify=False):
         if not self.state: return
         self.state.prose.title = self.prose_title.value
-        self.state.prose.content = self.prose_editor.value
+        # Beats are updated in-place via _handle_beat_change
         self.state.save_prose(self.state.prose)
         if notify:
             ui.notify("Prose saved!", type='positive', position='top')

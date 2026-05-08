@@ -108,6 +108,15 @@ STYLE_DEFINITION = '''
     }
     .slot-bubble:hover { background-color: #cbd5e1; }
     .slot-bubble.active { background-color: #3b82f6; color: white; transform: scale(1.1); }
+    
+    .beat-card {
+        transition: all 0.3s ease;
+    }
+    .beat-card.active {
+        background-color: #f0f9ff !important;
+        border-left: 4px solid #3b82f6 !important;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+    }
 </style>
 '''
 

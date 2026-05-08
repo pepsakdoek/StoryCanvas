@@ -152,7 +152,12 @@ class Relationship(BaseModel):
     attributes: Dict[str, str] = Field(default_factory=dict)
 
 # --- Prose ---
+class Beat(BaseModel):
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    text: str = ""
+
 class Prose(BaseModel):
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = ""
-    content: str = ""
+    beats: List[Beat] = Field(default_factory=list)
+    content: Optional[str] = None # Legacy field for migration

@@ -133,25 +133,59 @@ def _edit_prose_cli(state: CanvasState):
     while True:
         print(f"\n--- Prose Editor [{state.current_slot}] ---")
         print(f"Title: {state.prose.title}")
-        print(f"Content: {state.prose.content[:100]}..." if state.prose.content else "Content: (empty)")
-        print("\n1. Edit Title\n2. Edit Content\n3. View Full\n4. Clear\n5. Back")
+        print(f"Beats: {len(state.prose.beats)}")
+        
+        for i, beat in enumerate(state.prose.beats):
+            snippet = beat.text[:60].replace('\n', ' ')
+            print(f"  {i+1}. {snippet}...")
+            
+        print("\n1. Edit Title\n2. Add New Beat\n3. Edit Specific Beat\n4. Delete Beat\n5. View Full Prose\n6. Clear All\n7. Back")
         choice = input("Select: ").strip()
+        
         if choice == "1":
             state.prose.title = input("Enter new title: ").strip()
             state.save_prose(state.prose)
         elif choice == "2":
-            print("Enter content (type END on a new line to finish):")
+            print("Enter beat text (type END on a new line to finish):")
             lines = []
             while True:
                 line = input()
                 if line.strip() == "END": break
                 lines.append(line)
-            state.prose.content = "\n".join(lines)
+            from ..models import Beat
+            state.prose.beats.append(Beat(text="\n".join(lines)))
             state.save_prose(state.prose)
         elif choice == "3":
-            print(f"\n--- {state.prose.title} ---\n{state.prose.content}\n---")
+            try:
+                idx = int(input("Select beat number: ")) - 1
+                beat = state.prose.beats[idx]
+                print(f"\n--- Editing Beat {idx+1} ---")
+                print(f"Current: {beat.text}")
+                print("\nEnter new text (type END on a new line, or leave empty to keep):")
+                lines = []
+                while True:
+                    line = input()
+                    if line.strip() == "END": break
+                    lines.append(line)
+                if lines:
+                    beat.text = "\n".join(lines)
+                    state.save_prose(state.prose)
+            except: print("Invalid selection.")
         elif choice == "4":
-            if input("Clear prose? (y/n): ").lower() == 'y':
-                state.prose.title = ""; state.prose.content = ""
+            try:
+                idx = int(input("Select beat to delete: ")) - 1
+                confirm = input(f"Delete beat {idx+1}? (y/n): ").lower()
+                if confirm == 'y':
+                    state.prose.beats.pop(idx)
+                    state.save_prose(state.prose)
+            except: print("Invalid selection.")
+        elif choice == "5":
+            print(f"\n--- {state.prose.title} ---")
+            for i, beat in enumerate(state.prose.beats):
+                print(f"\n[Beat {i+1}]\n{beat.text}")
+            print("\n--- End ---")
+        elif choice == "6":
+            if input("Clear all beats? (y/n): ").lower() == 'y':
+                state.prose.beats = []
                 state.save_prose(state.prose)
-        elif choice == "5": break
+        elif choice == "7": break

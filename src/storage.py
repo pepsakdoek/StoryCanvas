@@ -73,6 +73,48 @@ class CanvasState:
         self.relationships: List[Relationship] = self._load_relationships()
         self.prose: Prose = self._load_prose()
 
+    def get_timeline_map(self) -> Dict[str, Any]:
+        """Returns a mapping of global indices to (slot, beat_idx) and chapter markers."""
+        if hasattr(self, '_timeline_cache') and self._timeline_cache:
+            return self._timeline_cache
+
+        mapping = []
+        chapter_starts = {}
+        total_beats = 0
+        
+        slots = self.get_slots()
+        for slot in slots:
+            chapter_starts[total_beats] = slot
+            prose_path = os.path.join(self.slots_dir, slot, "Prose.json")
+            
+            beat_count = 0
+            if os.path.exists(prose_path):
+                with open(prose_path, "r") as f:
+                    try:
+                        data = json.load(f)
+                        if 'beats' in data and data['beats']:
+                            beat_count = len(data['beats'])
+                        elif 'content' in data and data['content']:
+                            beat_count = len([p for p in data['content'].split('\n\n') if p.strip()])
+                    except:
+                        beat_count = 0
+            
+            # Ensure at least 1 index per chapter
+            for i in range(max(1, beat_count)):
+                mapping.append({"slot": slot, "beat_idx": i})
+            
+            total_beats += max(1, beat_count)
+
+        self._timeline_cache = {
+            "mapping": mapping,
+            "chapter_starts": chapter_starts,
+            "total_beats": len(mapping)
+        }
+        return self._timeline_cache
+
+    def invalidate_timeline_cache(self):
+        self._timeline_cache = None
+
     def get_slots(self) -> List[str]:
         if not os.path.exists(self.slots_dir): return []
         return sorted([d for d in os.listdir(self.slots_dir) if os.path.isdir(os.path.join(self.slots_dir, d))])
@@ -83,6 +125,7 @@ class CanvasState:
             self._load_current_slot()
 
     def create_slot(self, name: str, clone_current: bool = True):
+        self.invalidate_timeline_cache()
         new_path = os.path.join(self.slots_dir, name)
         if os.path.exists(new_path): return False
         if clone_current and os.path.exists(self.slot_path):
@@ -256,11 +299,19 @@ class CanvasState:
             with open(self.prose_file, "r") as f:
                 try: 
                     data = json.load(f)
+                    # Migration: If we have legacy 'content' but no 'beats'
+                    if 'content' in data and data['content'] and (not data.get('beats')):
+                        content = data['content']
+                        # Split by double newline to create initial beats
+                        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+                        data['beats'] = [{'text': p} for p in paragraphs]
+                        data['content'] = None # Mark as migrated
                     return Prose(**data)
                 except: return Prose()
         return Prose()
 
     def save_prose(self, prose: Prose):
+        self.invalidate_timeline_cache()
         self.prose = prose
         with open(self.prose_file, "w") as f:
             json.dump(prose.model_dump(), f, indent=4)
@@ -277,6 +328,7 @@ class CanvasState:
             json.dump([r.model_dump() for r in self.relationships], f, indent=4)
 
     def delete_slot(self, name: str):
+        self.invalidate_timeline_cache()
         if name not in self.get_slots(): return False
         if len(self.get_slots()) <= 1: return False
         

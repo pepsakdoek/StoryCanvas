@@ -15,6 +15,7 @@ This document lists all functionalities available in the StoryCanvas GUI that in
     *   *Option:* Clone state from the currently active chapter.
 *   ✅✅ **Switch Chapter:** Load the state, events, relationships, and prose of a specific chapter.
 *   ✅✅ **Delete Chapter:** Remove a chapter and all its associated data from the canvas.
+*   ✅❌ **Narrative Timeline:** Use a global slider to scrub through the entire story across all chapters and beats.
 
 ## 3. Entity Management (Actors, Places, Items, Knowledge)
 *   ✅✅ **Add Entity:** Create a new entity of a specific type.
