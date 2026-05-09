@@ -122,29 +122,27 @@ class StoryCanvasGUI:
             # Key listeners for panning (global)
             ui.keyboard(on_key=self._handle_key)
 
-            # Main content area: Canvas on left (75%) + Prose on right (25%)
-            with ui.row().classes('w-full flex-1 gap-0 overflow-hidden').props('id=workspace-row'):
-                # ... (canvas and prose panels)
-                # Canvas area (75%)
-                self.canvas_container = ui.element('div').classes('canvas-container w-3/4 h-full relative').props('id=canvas-viewport')
-                self.canvas_container.on('mousedown', self._handle_canvas_mousedown)
-                self.canvas_container.on('mousemove', self._handle_mousemove)
-                self.canvas_container.on('mouseup', self._handle_mouseup)
-                self.canvas_container.on('mouseleave', self._handle_mouseup)
+            # Main content area: Resizable Splitter
+            with ui.splitter(value=75).classes('w-full flex-1 overflow-hidden').props('id=workspace-splitter') as splitter:
+                with splitter.before:
+                    # Canvas area
+                    self.canvas_container = ui.element('div').classes('canvas-container w-full h-full relative').props('id=canvas-viewport')
+                    self.canvas_container.on('mousedown', self._handle_canvas_mousedown)
+                    self.canvas_container.on('mousemove', self._handle_mousemove)
+                    self.canvas_container.on('mouseup', self._handle_mouseup)
+                    self.canvas_container.on('mouseleave', self._handle_mouseup)
 
-                with self.canvas_container:
-                    # Debug Placeholder
-                    ui.label("CANVAS CONTAINER ACTIVE").classes('absolute-center text-slate-200 text-4xl pointer-events-none opacity-20 z-0')
-                    
-                    # Inner content that will be transformed for panning
-                    self.canvas_content = ui.element('div').classes('canvas-content').props('id=canvas-surface')
-                    self._apply_pan()
-                    with self.canvas_content:
-                        self.canvas.refresh_canvas_content()
+                    with self.canvas_container:
+                        ui.label("CANVAS CONTAINER ACTIVE").classes('absolute-center text-slate-200 text-4xl pointer-events-none opacity-20 z-0')
+                        self.canvas_content = ui.element('div').classes('canvas-content').props('id=canvas-surface')
+                        self._apply_pan()
+                        with self.canvas_content:
+                            self.canvas.refresh_canvas_content()
                 
-                # Prose area (25%)
-                with ui.column().classes('w-1/4 h-full border-l border-slate-300 overflow-hidden bg-white').props('id=prose-panel'):
-                    self._build_prose_panel()
+                with splitter.after:
+                    # Prose area
+                    with ui.column().classes('w-full h-full border-l border-slate-300 overflow-hidden bg-white').props('id=prose-panel'):
+                        self._build_prose_panel()
 
             # FOOTER TIMELINE BAR
             with ui.row().classes('w-full h-12 bg-slate-800 text-white items-center px-4 gap-4 z-[100] shadow-[0_-2px_10px_rgba(0,0,0,0.2)]'):
@@ -210,17 +208,19 @@ class StoryCanvasGUI:
         
         # Story Traversal Shortcuts
         if e.action.keydown:
-            # Chapter Navigation (Ctrl + Shift + PageUp/Down)
-            if e.modifiers.ctrl and e.modifiers.shift:
-                slots = self.state.get_slots()
-                current_idx = slots.index(self.state.current_slot)
-                if e.key.page_up and current_idx > 0:
-                    self._switch_slot(slots[current_idx - 1])
-                elif e.key.page_down and current_idx < len(slots) - 1:
-                    self._switch_slot(slots[current_idx + 1])
+            # Chapter Navigation (Shift + PageUp/Down)
+            if e.modifiers.shift:
+                if e.key.page_up or e.key.page_down:
+                    slots = self.state.get_slots()
+                    current_idx = slots.index(self.state.current_slot)
+                    if e.key.page_up and current_idx > 0:
+                        self._switch_slot(slots[current_idx - 1])
+                    elif e.key.page_down and current_idx < len(slots) - 1:
+                        self._switch_slot(slots[current_idx + 1])
             
-            # Beat Navigation (Ctrl + PageUp/Down)
-            elif e.modifiers.ctrl:
+            # Beat Navigation (Plain PageUp/Down)
+            # Only trigger if NO modifiers are held (to avoid browser conflicts like Ctrl+PgUp)
+            elif not e.modifiers.ctrl and not e.modifiers.alt:
                 if e.key.page_up:
                     self._on_timeline_change(max(0, self.timeline_slider.value - 1))
                     self.timeline_slider.value = max(0, self.timeline_slider.value - 1)
@@ -376,24 +376,64 @@ class StoryCanvasGUI:
         if not self.state: return
         self.beat_editors = []
         
-        with ui.column().classes('w-full p-4 gap-4 pb-48'):
+        with ui.column().classes('w-full p-4 gap-2 pb-48'):
             for i, beat in enumerate(self.state.prose.beats):
                 is_active = (i == self.state.active_beat_idx)
                 
-                with ui.element('div').classes(f'w-full relative group p-2 rounded-lg transition-all {"bg-blue-50/50 ring-1 ring-blue-100" if is_active else "hover:bg-white"}') \
+                with ui.element('div').classes(f'w-full relative group p-2 rounded-lg transition-all {"bg-white shadow-md ring-1 ring-blue-200" if is_active else "hover:bg-slate-100 opacity-60"}') \
                     .on('click', lambda _, idx=i: self._select_beat(idx)):
                     
-                    # Beat Indicator (Superscript style)
-                    ui.label(self._to_superscript(i+1)).classes('absolute -left-1 top-0 text-[10px] text-slate-300 font-bold pointer-events-none group-hover:text-blue-300')
-                    
-                    # Borderless Editor
-                    editor = ui.editor(value=beat.text).classes('w-full text-sm border-none shadow-none bg-transparent')
-                    editor.props('flat dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p placeholder="Continue the story..."')
-                    
-                    editor.on_value_change(lambda e, b=beat: self._update_beat_text(b, e.value))
-                    editor.on('keydown.control.enter', lambda _, idx=i: self._commit_and_next(idx))
-                    
-                    self.beat_editors.append(editor)
+                    # Beat Header (Index + Actions)
+                    with ui.row().classes('w-full items-center justify-between mb-1'):
+                        ui.label(self._to_superscript(i+1)).classes('text-[10px] text-slate-400 font-bold pointer-events-none group-hover:text-blue-400')
+                        
+                        # Delete Button (Always visible for active, visible on hover for others)
+                        ui.button(icon='delete', on_click=lambda _, idx=i: self._delete_beat(idx)) \
+                            .props('flat dense round color=red-3').classes(f'scale-75 {"" if is_active else "opacity-0 group-hover:opacity-100"} transition-opacity')
+
+                    if is_active:
+                        editor = ui.editor(value=beat.text).classes('w-full text-sm border-none shadow-none bg-transparent')
+                        editor.props('flat dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p placeholder="Continue the story..."')
+                        editor.on_value_change(lambda e, b=beat: self._update_beat_text(b, e.value))
+                        editor.on('keydown.control.enter', lambda _, idx=i: self._commit_and_next(idx))
+                        self.beat_editors.append(editor)
+                    else:
+                        import re
+                        # Ensure the preview container has overflow-hidden and min-width-0 to allow truncation
+                        with ui.row().classes('w-full overflow-hidden min-w-0'):
+                            plain_text = re.sub('<[^<]+?>', '', beat.text or "Empty beat...")
+                            ui.label(plain_text).classes('text-xs text-slate-500 italic truncate w-full cursor-pointer px-2')
+
+    def _refresh_timeline(self):
+        tmap = self.state.get_timeline_map()
+        self.timeline_slider.props(f'max={tmap["total_beats"] - 1}')
+        self.timeline_label.text = f"Chapter: {self.state.current_slot} | Beat: {self.state.active_beat_idx + 1}"
+
+    def _delete_beat(self, index):
+        if len(self.state.prose.beats) <= 1:
+            ui.notify("Cannot delete the only beat.", type='warning')
+            return
+        
+        async def confirm():
+            self.state.prose.beats.pop(index)
+            if self.state.active_beat_idx >= index:
+                self.state.active_beat_idx = max(0, self.state.active_beat_idx - 1)
+            
+            self.state.save_prose(self.state.prose)
+            self.state.invalidate_timeline_cache()
+            self._refresh_timeline()
+            self._refresh_canvas_content()
+            self._render_beat_editors.refresh()
+            ui.notify(f"Beat {index+1} removed.")
+            dialog.close()
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label(f"Delete Beat {index+1}?").classes('text-lg font-bold')
+            ui.label("This will also remove the world state (Mind Map) for this specific moment.")
+            with ui.row().classes('w-full justify-end gap-2'):
+                ui.button('Cancel', on_click=dialog.close).props('flat')
+                ui.button('Delete', on_click=confirm).props('flat color=red')
+        dialog.open()
 
     def _to_superscript(self, n):
         subs = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
@@ -411,12 +451,22 @@ class StoryCanvasGUI:
         self.prose_save_timer = ui.timer(1.5, self._save_prose, once=True)
 
     def _commit_and_next(self, current_idx):
+        beat = self.state.prose.beats[current_idx]
+        import re
+        plain_text = re.sub('<[^<]+?>', '', beat.text or "").strip()
+        if not plain_text:
+            ui.notify("Write something before starting a new beat!", type='warning')
+            return
+
         self._save_prose()
         new_idx = self.state.create_next_beat(current_idx)
         self.state.set_active_beat(new_idx)
+        self.state.invalidate_timeline_cache()
+        self._refresh_timeline()
         self._render_beat_editors.refresh()
-        ui.notify("New beat created. State inherited.", type='positive', position='top-right')
+        ui.notify("Beat committed. State inherited.", type='positive', position='top-right')
         ui.timer(0.1, lambda: self._focus_editor(new_idx), once=True)
+
 
     def _focus_editor(self, index):
         ui.run_javascript(f"document.querySelectorAll('#prose-inner-container .q-editor__content')[{index}]?.focus()")
