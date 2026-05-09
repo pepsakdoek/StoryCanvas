@@ -89,9 +89,12 @@ class StoryCanvasGUI:
                 with ui.row().classes('items-center gap-4'):
                     ui.button(icon='home', on_click=self.build_selector).props('flat round color=slate-600').tooltip("Home")
                     ui.separator().props('vertical')
-                    for etype in ['Actor', 'Place', 'Item', 'Knowledge', 'Event']:
-                        ui.checkbox(etype, value=self.type_filter.get(etype, True), 
-                                   on_change=lambda e, t=etype: self._toggle_type_filter(t, e.value)).classes('text-xs')
+                    # Importance Level Filters (Dynamic from story settings)
+                    with ui.row().classes('items-center gap-2 bg-slate-50 p-1 px-2 rounded-lg border border-slate-200'):
+                        ui.icon('filter_list', size='xs').classes('text-slate-400')
+                        for level in self.state.settings.importance_levels:
+                            ui.checkbox(level.title(), value=self.importance_filter.get(level, True), 
+                                       on_change=lambda e, l=level: self._toggle_importance_filter(l, e.value)).classes('text-[10px] font-bold text-slate-600')
                     ui.separator().props('vertical')
                     ui.button(icon='person_add', on_click=lambda: self.dialogs.add_entity_dialog("Actor")).props('round unelevated dense color=red-5').tooltip("Add Actor")
                     ui.button(icon='add_location', on_click=lambda: self.dialogs.add_entity_dialog("Place")).props('round unelevated dense color=green-5').tooltip("Add Place")
@@ -204,6 +207,27 @@ class StoryCanvasGUI:
             else:
                 self.canvas_container.classes(remove='cursor-grab cursor-grabbing')
                 self.is_panning = False
+        
+        # Story Traversal Shortcuts
+        if e.action.keydown:
+            # Chapter Navigation (Ctrl + Shift + PageUp/Down)
+            if e.modifiers.ctrl and e.modifiers.shift:
+                slots = self.state.get_slots()
+                current_idx = slots.index(self.state.current_slot)
+                if e.key.page_up and current_idx > 0:
+                    self._switch_slot(slots[current_idx - 1])
+                elif e.key.page_down and current_idx < len(slots) - 1:
+                    self._switch_slot(slots[current_idx + 1])
+            
+            # Beat Navigation (Ctrl + PageUp/Down)
+            elif e.modifiers.ctrl:
+                if e.key.page_up:
+                    self._on_timeline_change(max(0, self.timeline_slider.value - 1))
+                    self.timeline_slider.value = max(0, self.timeline_slider.value - 1)
+                elif e.key.page_down:
+                    tmap = self.state.get_timeline_map()
+                    self._on_timeline_change(min(tmap['total_beats'] - 1, self.timeline_slider.value + 1))
+                    self.timeline_slider.value = min(tmap['total_beats'] - 1, self.timeline_slider.value + 1)
 
     def _handle_canvas_mousedown(self, e: events.MouseEventArguments):
         if self.is_panning_mode:
@@ -215,8 +239,9 @@ class StoryCanvasGUI:
         if hasattr(self, 'canvas_content') and self.canvas_content:
             self.canvas_content.style(f"transform: translate({self.pan_offset['x']}px, {self.pan_offset['y']}px);")
 
-    def _toggle_type_filter(self, etype, value):
-        self.type_filter[etype] = value; self._refresh_canvas_content()
+    def _toggle_importance_filter(self, level, value):
+        self.importance_filter[level] = value
+        self._refresh_canvas_content()
 
     def _refresh_canvas_content(self):
         self.canvas.refresh_canvas_content()
@@ -353,6 +378,20 @@ class StoryCanvasGUI:
     def _handle_prose_change(self, e):
         if hasattr(self, 'char_count_label'):
             self.char_count_label.text = f'Chars: {len(e.value or "")}'
+        
+        # Trigger immediate save and 'new beat' logic on 4 newlines
+        # In Quill (ui.editor), this usually appears as 4 consecutive empty paragraphs
+        if e.value and (e.value.count('<p><br></p>') >= 4 or e.value.count('\n\n\n\n') >= 4):
+            # Clean up the extra newlines before saving to keep it tidy
+            cleaned = e.value.replace('<p><br></p><p><br></p><p><br></p><p><br></p>', '<p><br></p>')
+            cleaned = cleaned.replace('\n\n\n\n', '\n\n')
+            if cleaned != e.value:
+                self.prose_editor.value = cleaned
+            
+            self._save_prose(notify=True)
+            ui.notify("New Beat committed", type='positive', position='top-right')
+            return
+
         if self.prose_save_timer:
             self.prose_save_timer.cancel()
         self.prose_save_timer = ui.timer(1.5, self._save_prose, once=True)

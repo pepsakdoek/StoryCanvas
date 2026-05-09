@@ -25,13 +25,9 @@ class CanvasManager:
                     logging.warning(f"Entity {uid} has state but no identity in registry!")
                     continue
                 
-                type_ok = self.gui.type_filter.get(identity.entity_type, True)
-                imp_ok = True
-                if identity.entity_type == 'Actor':
-                    imp_ok = self.gui.importance_filter.get(identity.importance, True)
-                
-                if not type_ok or not imp_ok:
-                    logging.debug(f"Skipping {identity.name} ({identity.entity_type}): type_ok={type_ok}, imp_ok={imp_ok}")
+                # Check Importance Filter
+                if not self.gui.importance_filter.get(identity.importance, True):
+                    logging.debug(f"Skipping {identity.name}: importance filtered out")
                     continue
                 
                 logging.debug(f"Rendering {identity.name} at ({state.x}, {state.y})")
@@ -39,10 +35,12 @@ class CanvasManager:
                 entities_rendered += 1
             
             events_rendered = 0
-            if self.gui.type_filter.get('Event', True):
-                for ev in self.gui.state.events:
-                    self._add_event_to_ui(ev)
-                    events_rendered += 1
+            for ev in self.gui.state.events:
+                # Events also have importance levels
+                if not self.gui.importance_filter.get(ev.importance, True):
+                    continue
+                self._add_event_to_ui(ev)
+                events_rendered += 1
             
             logging.info(f"Rendered {entities_rendered} entities and {events_rendered} events")
             ui.notify(f"Rendered {entities_rendered} entities and {events_rendered} events")
