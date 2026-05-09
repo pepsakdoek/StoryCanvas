@@ -155,6 +155,10 @@ class Relationship(BaseModel):
 class Beat(BaseModel):
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()))
     text: str = ""
+    # Per-beat world state
+    entity_states: Dict[str, EntityState] = Field(default_factory=dict)
+    events: List[Event] = Field(default_factory=list)
+    relationships: List[Relationship] = Field(default_factory=list)
 
 class Prose(BaseModel):
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()))

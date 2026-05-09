@@ -356,8 +356,9 @@ class StoryCanvasGUI:
 
     def _build_prose_panel(self):
         if not self.state: return
-        with ui.column().classes('w-full h-full p-2 gap-2 overflow-hidden').props('id=prose-inner-container'):
-            with ui.row().classes('w-full items-center gap-2 border-b border-slate-200 pb-2'):
+        with ui.column().classes('w-full h-full p-0 gap-0 overflow-hidden bg-slate-50').props('id=prose-inner-container'):
+            # Header
+            with ui.row().classes('w-full items-center gap-2 border-b border-slate-200 p-2 bg-white'):
                 ui.icon('edit_note').classes('text-slate-400')
                 self.prose_title = ui.input(value=self.state.prose.title, placeholder='Chapter Title') \
                     .classes('grow text-sm').props('dense borderless').on('change', self._save_prose)
@@ -365,40 +366,64 @@ class StoryCanvasGUI:
                     ui.button(icon='auto_awesome', on_click=self._prose_llm_action).props('flat dense round color=amber-7').tooltip('Extract Entities (LLM)')
                     ui.button(icon='save', on_click=lambda: self._save_prose(notify=True)).props('flat dense round color=blue-5').tooltip('Save')
             
-            # Combine beats into one block for the rich editor
-            content = "\n\n".join([b.text for b in self.state.prose.beats])
-            self.prose_editor = ui.editor(value=content).classes('w-full flex-1 text-sm overflow-auto').props('id=prose-editor')
-            self.prose_editor.props('flat square dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p')
-            self.prose_editor.on_value_change(self._handle_prose_change)
+            # The Seamless Editor (Scrollable list of Beat components)
+            self.editor_scroll = ui.scroll_area().classes('w-full flex-1')
+            with self.editor_scroll:
+                self._render_beat_editors()
 
-            with ui.row().classes('w-full justify-between items-center px-1'):
-                ui.label('Rich Editor').classes('text-[10px] text-slate-400 uppercase tracking-tighter')
-                self.char_count_label = ui.label(f'Chars: {len(content)}').classes('text-[10px] text-slate-400')
-
-    def _handle_prose_change(self, e):
-        if hasattr(self, 'char_count_label'):
-            self.char_count_label.text = f'Chars: {len(e.value or "")}'
+    @ui.refreshable
+    def _render_beat_editors(self):
+        if not self.state: return
+        self.beat_editors = []
         
-        # Trigger immediate save and 'new beat' logic on 4 newlines
-        # In Quill (ui.editor), this usually appears as 4 consecutive empty paragraphs
-        if e.value and (e.value.count('<p><br></p>') >= 4 or e.value.count('\n\n\n\n') >= 4):
-            # Clean up the extra newlines before saving to keep it tidy
-            cleaned = e.value.replace('<p><br></p><p><br></p><p><br></p><p><br></p>', '<p><br></p>')
-            cleaned = cleaned.replace('\n\n\n\n', '\n\n')
-            if cleaned != e.value:
-                self.prose_editor.value = cleaned
-            
-            self._save_prose(notify=True)
-            ui.notify("New Beat committed", type='positive', position='top-right')
-            return
+        with ui.column().classes('w-full p-4 gap-4 pb-48'):
+            for i, beat in enumerate(self.state.prose.beats):
+                is_active = (i == self.state.active_beat_idx)
+                
+                with ui.element('div').classes(f'w-full relative group p-2 rounded-lg transition-all {"bg-blue-50/50 ring-1 ring-blue-100" if is_active else "hover:bg-white"}') \
+                    .on('click', lambda _, idx=i: self._select_beat(idx)):
+                    
+                    # Beat Indicator (Superscript style)
+                    ui.label(self._to_superscript(i+1)).classes('absolute -left-1 top-0 text-[10px] text-slate-300 font-bold pointer-events-none group-hover:text-blue-300')
+                    
+                    # Borderless Editor
+                    editor = ui.editor(value=beat.text).classes('w-full text-sm border-none shadow-none bg-transparent')
+                    editor.props('flat dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p placeholder="Continue the story..."')
+                    
+                    editor.on_value_change(lambda e, b=beat: self._update_beat_text(b, e.value))
+                    editor.on('keydown.control.enter', lambda _, idx=i: self._commit_and_next(idx))
+                    
+                    self.beat_editors.append(editor)
 
-        if self.prose_save_timer:
-            self.prose_save_timer.cancel()
+    def _to_superscript(self, n):
+        subs = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+        return str(n).translate(subs)
+
+    def _select_beat(self, index):
+        if self.state.active_beat_idx != index:
+            self.state.set_active_beat(index)
+            self._refresh_canvas_content()
+            self._render_beat_editors.refresh()
+
+    def _update_beat_text(self, beat, text):
+        beat.text = text
+        if self.prose_save_timer: self.prose_save_timer.cancel()
         self.prose_save_timer = ui.timer(1.5, self._save_prose, once=True)
 
+    def _commit_and_next(self, current_idx):
+        self._save_prose()
+        new_idx = self.state.create_next_beat(current_idx)
+        self.state.set_active_beat(new_idx)
+        self._render_beat_editors.refresh()
+        ui.notify("New beat created. State inherited.", type='positive', position='top-right')
+        ui.timer(0.1, lambda: self._focus_editor(new_idx), once=True)
+
+    def _focus_editor(self, index):
+        ui.run_javascript(f"document.querySelectorAll('#prose-inner-container .q-editor__content')[{index}]?.focus()")
+
     async def _prose_llm_action(self):
-        content = self.prose_editor.value
-        if not content or len(content) < 10:
+        full_content = "\n\n".join([b.text for b in self.state.prose.beats])
+        if len(full_content) < 10:
             ui.notify("Prose is too short for analysis", type='warning')
             return
             
@@ -406,7 +431,7 @@ class StoryCanvasGUI:
         ui.notify("Analyzing prose with LLM...", type='ongoing', spinner=True)
         
         result = await run.io_bound(analyze_prose,
-            content,
+            full_content,
             self.state.app_settings.llm_endpoint,
             self.state.app_settings.llm_model
         )
@@ -424,19 +449,6 @@ class StoryCanvasGUI:
     def _save_prose(self, e=None, notify=False):
         if not self.state: return
         self.state.prose.title = self.prose_title.value
-        content = self.prose_editor.value
-        
-        # Heuristic: split by double-newline to maintain 'Beats' for the timeline
-        # We strip HTML tags for the internal text storage if possible, 
-        # but ui.editor content is better kept as is if we want rich text.
-        # For the Beat model, we'll store the rich text fragments.
-        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
-        
-        from ..models import Beat
-        # Try to preserve UIDs for existing beats if they haven't changed much
-        # For now, simple replacement is safer for consistency
-        self.state.prose.beats = [Beat(text=p) for p in paragraphs]
-        
         self.state.save_prose(self.state.prose)
         if notify:
             ui.notify("Prose saved!", type='positive', position='top')
