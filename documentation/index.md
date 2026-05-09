@@ -19,7 +19,8 @@ This index provides a brief overview of all active source files in the StoryCanv
 *   `src/cli/utils.py`: Shared helper functions for input handling, importance selection, and entity listing.
 
 ## GUI Layer (`src/gui/`)
-*   `src/gui/app.py`: Orchestrates the main NiceGUI layout, header bar, and prose panel.
+*   `src/gui/app.py`: Orchestrates the main NiceGUI layout, header bar, and main navigation.
+*   `src/gui/prose_manager.py`: Manages the unified rich text editor, beat markers, and prose-to-canvas synchronization.
 *   `src/gui/canvas_manager.py`: Manages the interactive visual canvas, including rendering and positioning of entities.
 *   `src/gui/dialog_manager.py`: Central controller for opening and managing the state of various UI dialogs.
 *   `src/gui/dialog_utils.py`: Provides reusable UI components for dialogs, such as dynamic attribute field builders.

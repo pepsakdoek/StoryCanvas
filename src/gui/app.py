@@ -2,12 +2,13 @@ import os
 import shutil
 import uuid
 from typing import Optional, Dict, List, Type, Any
-from nicegui import app, ui, events
+from nicegui import app, ui, events, run
 from ..storage import CanvasState, get_available_canvases, SAVES_DIR
 from ..models import EntityIdentity, EntityState, Event, Relationship, DefaultImportance, RelationshipType, AttributeTemplate, CanvasSettings
 from .styles import setup_styles
 from .dialog_manager import DialogManager
 from .canvas_manager import CanvasManager
+from .prose_manager import ProseManager
 
 class StoryCanvasGUI:
     def __init__(self):
@@ -15,7 +16,6 @@ class StoryCanvasGUI:
         logging.info("Initializing StoryCanvasGUI...")
         self.state: Optional[CanvasState] = None
         self.active_entity: Optional[Dict[str, Any]] = None
-        self.active_beat_idx = -1
         self.canvas_container: Optional[ui.element] = None
         self.canvas_content: Optional[ui.element] = None
         
@@ -28,6 +28,7 @@ class StoryCanvasGUI:
         # Managers
         self.dialogs = DialogManager(self)
         self.canvas = CanvasManager(self)
+        self.prose_manager = ProseManager(self)
         
         setup_styles()
         # Force h-screen to ensure the root container fills the viewport
@@ -35,11 +36,7 @@ class StoryCanvasGUI:
         
         # Filters
         self.importance_filter = {} 
-        self.type_filter = {'Actor': True, 'Place': True, 'Item': True, 'Knowledge': True, 'Event': True}
         self.active_attr_tab = 'Actors'
-        
-        # Prose saving debounce
-        self.prose_save_timer: Optional[ui.timer] = None
         
         logging.info("StoryCanvasGUI initialized.")
 
@@ -142,7 +139,7 @@ class StoryCanvasGUI:
                 with splitter.after:
                     # Prose area
                     with ui.column().classes('w-full h-full border-l border-slate-300 overflow-hidden bg-white').props('id=prose-panel'):
-                        self._build_prose_panel()
+                        self.prose_manager.build_panel()
 
             # FOOTER TIMELINE BAR
             with ui.row().classes('w-full h-12 bg-slate-800 text-white items-center px-4 gap-4 z-[100] shadow-[0_-2px_10px_rgba(0,0,0,0.2)]'):
@@ -173,29 +170,21 @@ class StoryCanvasGUI:
         target_slot = info['slot']
         target_beat = info['beat_idx']
         
-        self.timeline_label.text = f"Chapter: {target_slot} | Beat: {target_beat + 1}"
-        self.active_beat_idx = target_beat
-
         if target_slot != self.state.current_slot:
             self.state.switch_slot(target_slot)
+            self.state.set_active_beat(target_beat)
             self.build_canvas()
+        else:
+            self.state.set_active_beat(target_beat)
+            self._refresh_canvas_content()
+            self.prose_manager.focus_beat(target_beat)
         
-        # Precise scrolling in the rich editor using JS
-        # We look for the n-th paragraph or div in the editor and scroll to it
-        js_scroll = f"""
-            var editor = document.getElementById('prose-editor');
-            if (editor) {{
-                var paras = editor.querySelectorAll('p, div');
-                if (paras.length > {target_beat}) {{
-                    paras[{target_beat}].scrollIntoView({{behavior: 'smooth', block: 'center'}});
-                    // Add a temporary highlight effect
-                    var originalBg = paras[{target_beat}].style.backgroundColor;
-                    paras[{target_beat}].style.backgroundColor = '#f0f9ff';
-                    setTimeout(() => paras[{target_beat}].style.backgroundColor = originalBg, 2000);
-                }}
-            }}
-        """
-        ui.run_javascript(js_scroll)
+        self.timeline_label.text = f"Chapter: {target_slot} | Beat: {target_beat + 1}"
+
+    def _refresh_timeline(self):
+        tmap = self.state.get_timeline_map()
+        self.timeline_slider.props(f'max={tmap["total_beats"] - 1}')
+        self.timeline_label.text = f"Chapter: {self.state.current_slot} | Beat: {self.state.active_beat_idx + 1}"
 
     def _handle_key(self, e: events.KeyEventArguments):
         if e.key == ' ':
@@ -208,7 +197,6 @@ class StoryCanvasGUI:
         
         # Story Traversal Shortcuts
         if e.action.keydown:
-            # Chapter Navigation (Shift + PageUp/Down)
             if e.modifiers.shift:
                 if e.key.page_up or e.key.page_down:
                     slots = self.state.get_slots()
@@ -218,16 +206,16 @@ class StoryCanvasGUI:
                     elif e.key.page_down and current_idx < len(slots) - 1:
                         self._switch_slot(slots[current_idx + 1])
             
-            # Beat Navigation (Plain PageUp/Down)
-            # Only trigger if NO modifiers are held (to avoid browser conflicts like Ctrl+PgUp)
             elif not e.modifiers.ctrl and not e.modifiers.alt:
                 if e.key.page_up:
-                    self._on_timeline_change(max(0, self.timeline_slider.value - 1))
-                    self.timeline_slider.value = max(0, self.timeline_slider.value - 1)
+                    val = max(0, self.timeline_slider.value - 1)
+                    self._on_timeline_change(val)
+                    self.timeline_slider.value = val
                 elif e.key.page_down:
                     tmap = self.state.get_timeline_map()
-                    self._on_timeline_change(min(tmap['total_beats'] - 1, self.timeline_slider.value + 1))
-                    self.timeline_slider.value = min(tmap['total_beats'] - 1, self.timeline_slider.value + 1)
+                    val = min(tmap['total_beats'] - 1, self.timeline_slider.value + 1)
+                    self._on_timeline_change(val)
+                    self.timeline_slider.value = val
 
     def _handle_canvas_mousedown(self, e: events.MouseEventArguments):
         if self.is_panning_mode:
@@ -247,7 +235,6 @@ class StoryCanvasGUI:
         self.canvas.refresh_canvas_content()
 
     def _switch_slot(self, name):
-        self.active_beat_idx = -1
         self.state.switch_slot(name); self.build_canvas()
 
     def _delete_slot(self, name):
@@ -274,14 +261,13 @@ class StoryCanvasGUI:
 
     def _delete_event(self, uid):
         self.state.events = [e for e in self.state.events if e.uid != uid]
-        with open(self.state.events_file, "w") as f:
-            import json
-            json.dump([e.model_dump() for e in self.state.events], f, indent=4)
+        self.state.save_prose(self.state.prose)
         self._refresh_canvas_content()
 
     def _delete_relationship(self, uid):
         self.state.relationships = [r for r in self.state.relationships if r.uid != uid]
-        self.state.save_relationships(); self._refresh_canvas_content()
+        self.state.save_prose(self.state.prose)
+        self._refresh_canvas_content()
 
     def _auto_arrange(self):
         if self.state:
@@ -291,44 +277,32 @@ class StoryCanvasGUI:
 
     # Drag & Drop Handlers
     def _handle_mousedown(self, e: events.MouseEventArguments, card, uid, is_event):
-        # Ignore right-clicks (button 2) to allow context menu without starting a drag/refresh
-        if e.args.get('button') == 2:
-            return
-
+        if e.args.get('button') == 2: return
         if is_event:
             ev = next((ev for ev in self.state.events if ev.uid == uid), None)
             sx, sy = ev.x, ev.y
         else:
             state = self.state.entity_states.get(uid)
             sx, sy = state.x, state.y
-
         self.active_entity = {'card': card, 'uid': uid, 'is_event': is_event, 'smx': e.args['clientX'], 'smy': e.args['clientY'], 'sox': sx, 'soy': sy, 'cx': sx, 'cy': sy}
         card.classes(add='z-50 shadow-2xl scale-105')
 
     def _handle_mousemove(self, e: events.MouseEventArguments):
         if self.is_panning:
-            dx = e.args['clientX'] - self.last_mouse['x']
-            dy = e.args['clientY'] - self.last_mouse['y']
-            self.pan_offset['x'] += dx
-            self.pan_offset['y'] += dy
+            dx, dy = e.args['clientX'] - self.last_mouse['x'], e.args['clientY'] - self.last_mouse['y']
+            self.pan_offset['x'] += dx; self.pan_offset['y'] += dy
             self.last_mouse = {'x': e.args['clientX'], 'y': e.args['clientY']}
-            self._apply_pan()
-            return
-
+            self._apply_pan(); return
         if not self.active_entity: return
-        dx = e.args['clientX'] - self.active_entity['smx']
-        dy = e.args['clientY'] - self.active_entity['smy']
-        self.active_entity['cx'] = self.active_entity['sox'] + dx
-        self.active_entity['cy'] = self.active_entity['soy'] + dy
+        dx, dy = e.args['clientX'] - self.active_entity['smx'], e.args['clientY'] - self.active_entity['smy']
+        self.active_entity['cx'], self.active_entity['cy'] = self.active_entity['sox'] + dx, self.active_entity['soy'] + dy
         self.active_entity['card'].style(f"left: {self.active_entity['cx']}px; top: {self.active_entity['cy']}px; transition: none;")
 
     def _handle_mouseup(self):
         if self.is_panning:
             self.is_panning = False
-            if self.canvas_container:
-                self.canvas_container.classes(remove='cursor-grabbing')
+            if self.canvas_container: self.canvas_container.classes(remove='cursor-grabbing')
             return
-
         if not self.active_entity: return
         data = {'uid': self.active_entity['uid'], 'x': self.active_entity['cx'], 'y': self.active_entity['cy'], 'isEvent': self.active_entity['is_event']}
         self.active_entity['card'].classes(remove='z-50 shadow-2xl scale-105')
@@ -338,13 +312,9 @@ class StoryCanvasGUI:
     def _handle_pos_update(self, data):
         if not self.state: return
         uid, x, y, is_ev = data['uid'], data['x'], data['y'], data.get('isEvent', False)
-        
-        # Apply Grid Snap
         if self.state.app_settings.snap_to_grid:
             gs = self.state.app_settings.grid_size
-            x = round(x / gs) * gs
-            y = round(y / gs) * gs
-
+            x, y = round(x / gs) * gs, round(y / gs) * gs
         if is_ev:
             for ev in self.state.events:
                 if ev.uid == uid:
@@ -353,156 +323,6 @@ class StoryCanvasGUI:
         else:
             self.state.update_state(uid, float(x), float(y), self.state.entity_states[uid].attributes)
         self._refresh_canvas_content()
-
-    def _build_prose_panel(self):
-        if not self.state: return
-        with ui.column().classes('w-full h-full p-0 gap-0 overflow-hidden bg-slate-50').props('id=prose-inner-container'):
-            # Header
-            with ui.row().classes('w-full items-center gap-2 border-b border-slate-200 p-2 bg-white'):
-                ui.icon('edit_note').classes('text-slate-400')
-                self.prose_title = ui.input(value=self.state.prose.title, placeholder='Chapter Title') \
-                    .classes('grow text-sm').props('dense borderless').on('change', self._save_prose)
-                with ui.row().classes('gap-1'):
-                    ui.button(icon='auto_awesome', on_click=self._prose_llm_action).props('flat dense round color=amber-7').tooltip('Extract Entities (LLM)')
-                    ui.button(icon='save', on_click=lambda: self._save_prose(notify=True)).props('flat dense round color=blue-5').tooltip('Save')
-            
-            # The Seamless Editor (Scrollable list of Beat components)
-            self.editor_scroll = ui.scroll_area().classes('w-full flex-1')
-            with self.editor_scroll:
-                self._render_beat_editors()
-
-    @ui.refreshable
-    def _render_beat_editors(self):
-        if not self.state: return
-        self.beat_editors = []
-        
-        with ui.column().classes('w-full p-4 gap-2 pb-48'):
-            for i, beat in enumerate(self.state.prose.beats):
-                is_active = (i == self.state.active_beat_idx)
-                
-                with ui.element('div').classes(f'w-full relative group p-2 rounded-lg transition-all {"bg-white shadow-md ring-1 ring-blue-200" if is_active else "hover:bg-slate-100 opacity-60"}') \
-                    .on('click', lambda _, idx=i: self._select_beat(idx)):
-                    
-                    # Beat Header (Index + Actions)
-                    with ui.row().classes('w-full items-center justify-between mb-1'):
-                        ui.label(self._to_superscript(i+1)).classes('text-[10px] text-slate-400 font-bold pointer-events-none group-hover:text-blue-400')
-                        
-                        # Delete Button (Always visible for active, visible on hover for others)
-                        ui.button(icon='delete', on_click=lambda _, idx=i: self._delete_beat(idx)) \
-                            .props('flat dense round color=red-3').classes(f'scale-75 {"" if is_active else "opacity-0 group-hover:opacity-100"} transition-opacity')
-
-                    if is_active:
-                        editor = ui.editor(value=beat.text).classes('w-full text-sm border-none shadow-none bg-transparent')
-                        editor.props('flat dense toolbar-rounded toolbar-bg=blue-grey-1 paragraph-tag=p placeholder="Continue the story..."')
-                        editor.on_value_change(lambda e, b=beat: self._update_beat_text(b, e.value))
-                        editor.on('keydown.control.enter', lambda _, idx=i: self._commit_and_next(idx))
-                        self.beat_editors.append(editor)
-                    else:
-                        import re
-                        # Ensure the preview container has overflow-hidden and min-width-0 to allow truncation
-                        with ui.row().classes('w-full overflow-hidden min-w-0'):
-                            plain_text = re.sub('<[^<]+?>', '', beat.text or "Empty beat...")
-                            ui.label(plain_text).classes('text-xs text-slate-500 italic truncate w-full cursor-pointer px-2')
-
-    def _refresh_timeline(self):
-        tmap = self.state.get_timeline_map()
-        self.timeline_slider.props(f'max={tmap["total_beats"] - 1}')
-        self.timeline_label.text = f"Chapter: {self.state.current_slot} | Beat: {self.state.active_beat_idx + 1}"
-
-    def _delete_beat(self, index):
-        if len(self.state.prose.beats) <= 1:
-            ui.notify("Cannot delete the only beat.", type='warning')
-            return
-        
-        async def confirm():
-            self.state.prose.beats.pop(index)
-            if self.state.active_beat_idx >= index:
-                self.state.active_beat_idx = max(0, self.state.active_beat_idx - 1)
-            
-            self.state.save_prose(self.state.prose)
-            self.state.invalidate_timeline_cache()
-            self._refresh_timeline()
-            self._refresh_canvas_content()
-            self._render_beat_editors.refresh()
-            ui.notify(f"Beat {index+1} removed.")
-            dialog.close()
-
-        with ui.dialog() as dialog, ui.card():
-            ui.label(f"Delete Beat {index+1}?").classes('text-lg font-bold')
-            ui.label("This will also remove the world state (Mind Map) for this specific moment.")
-            with ui.row().classes('w-full justify-end gap-2'):
-                ui.button('Cancel', on_click=dialog.close).props('flat')
-                ui.button('Delete', on_click=confirm).props('flat color=red')
-        dialog.open()
-
-    def _to_superscript(self, n):
-        subs = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
-        return str(n).translate(subs)
-
-    def _select_beat(self, index):
-        if self.state.active_beat_idx != index:
-            self.state.set_active_beat(index)
-            self._refresh_canvas_content()
-            self._render_beat_editors.refresh()
-
-    def _update_beat_text(self, beat, text):
-        beat.text = text
-        if self.prose_save_timer: self.prose_save_timer.cancel()
-        self.prose_save_timer = ui.timer(1.5, self._save_prose, once=True)
-
-    def _commit_and_next(self, current_idx):
-        beat = self.state.prose.beats[current_idx]
-        import re
-        plain_text = re.sub('<[^<]+?>', '', beat.text or "").strip()
-        if not plain_text:
-            ui.notify("Write something before starting a new beat!", type='warning')
-            return
-
-        self._save_prose()
-        new_idx = self.state.create_next_beat(current_idx)
-        self.state.set_active_beat(new_idx)
-        self.state.invalidate_timeline_cache()
-        self._refresh_timeline()
-        self._render_beat_editors.refresh()
-        ui.notify("Beat committed. State inherited.", type='positive', position='top-right')
-        ui.timer(0.1, lambda: self._focus_editor(new_idx), once=True)
-
-
-    def _focus_editor(self, index):
-        ui.run_javascript(f"document.querySelectorAll('#prose-inner-container .q-editor__content')[{index}]?.focus()")
-
-    async def _prose_llm_action(self):
-        full_content = "\n\n".join([b.text for b in self.state.prose.beats])
-        if len(full_content) < 10:
-            ui.notify("Prose is too short for analysis", type='warning')
-            return
-            
-        from ..generators import analyze_prose
-        ui.notify("Analyzing prose with LLM...", type='ongoing', spinner=True)
-        
-        result = await run.io_bound(analyze_prose,
-            full_content,
-            self.state.app_settings.llm_endpoint,
-            self.state.app_settings.llm_model
-        )
-        
-        if result:
-            with ui.dialog() as dialog, ui.card().classes('w-[600px]'):
-                ui.label('LLM Analysis & Entity Extraction').classes('text-h6 font-bold')
-                ui.markdown(result).classes('w-full max-h-96 overflow-y-auto p-4 bg-slate-50 rounded')
-                with ui.row().classes('w-full justify-end'):
-                    ui.button('Close', on_click=dialog.close).props('flat')
-            dialog.open()
-        else:
-            ui.notify("LLM analysis failed", type='negative')
-
-    def _save_prose(self, e=None, notify=False):
-        if not self.state: return
-        self.state.prose.title = self.prose_title.value
-        self.state.save_prose(self.state.prose)
-        if notify:
-            ui.notify("Prose saved!", type='positive', position='top')
-        self.prose_save_timer = None
 
 def run_gui():
     gui = StoryCanvasGUI()
